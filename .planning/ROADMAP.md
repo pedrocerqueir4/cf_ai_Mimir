@@ -36,7 +36,7 @@ Plans:
 - [x] 01-01-PLAN.md — Project scaffold, D1 schema, Tailwind/shadcn setup, security middleware
 - [x] 01-02-PLAN.md — Better Auth configuration, auth API, rate limiting, Turnstile enforcement, SSRF boundary
 - [x] 01-03-PLAN.md — Auth UI screens (sign-up, sign-in, forgot-password, verify-email), OAuth error handling
-- [ ] 01-04-PLAN.md — App shell, responsive navigation, session persistence, empty state
+- [x] 01-04-PLAN.md — App shell, responsive navigation, session persistence, empty state
 
 **UI hint**: yes
 
