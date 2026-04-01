@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { sanitize } from "./middleware/sanitize";
 
 type Env = {
   DB: D1Database;
@@ -16,9 +17,9 @@ type Env = {
 const app = new Hono<{ Bindings: Env }>();
 
 app.use("/*", cors());
+app.use("/api/*", sanitize);
 
 // Auth routes will be mounted in Plan 02
-// Security middleware will be applied in this plan (Task 2)
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
