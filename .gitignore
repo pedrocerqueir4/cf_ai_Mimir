@@ -1,1 +1,9 @@
 .planning/
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+*.local
+.env
+.env.*
+!.env.example
