@@ -1,19 +1,23 @@
-import { defineWorkersConfig } from "@cloudflare/vitest-pool-workers/config";
+import { defineConfig } from "vitest/config";
+import { cloudflarePool } from "@cloudflare/vitest-pool-workers";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
-export default defineWorkersConfig({
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export default defineConfig({
+  root: __dirname,
   test: {
-    setupFiles: ["../tests/setup.ts"],
+    setupFiles: [path.resolve(__dirname, "../tests/setup.ts")],
     globals: true,
-    include: ["../tests/**/*.test.ts"],
-    poolOptions: {
-      workers: {
-        wrangler: {
-          configPath: "./wrangler.toml",
-        },
-        miniflare: {
-          d1Databases: ["DB"],
-        },
+    include: [path.resolve(__dirname, "../tests/**/*.test.ts")],
+    pool: cloudflarePool({
+      wrangler: {
+        configPath: path.resolve(__dirname, "./wrangler.toml"),
       },
-    },
+      miniflare: {
+        d1Databases: ["DB"],
+      },
+    }),
   },
 });

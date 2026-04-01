@@ -1,4 +1,4 @@
-import { env } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 
 // Apply D1 migrations before tests run
 // This ensures the auth tables (users, sessions, accounts, verifications) exist
