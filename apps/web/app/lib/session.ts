@@ -1,4 +1,14 @@
-const RESTORE_PATH_KEY = "mimir-restore-path";
+const RESTORE_KEY = "mimir-restore-path";
+
+/**
+ * Saves the current path before redirecting to sign-in on session expiry.
+ * Used for path restoration after re-authentication (D-03, UX-04).
+ */
+export function handleSessionExpiry(currentPath: string): void {
+  if (typeof window !== "undefined") {
+    sessionStorage.setItem(RESTORE_KEY, currentPath);
+  }
+}
 
 /**
  * Returns the previously stored path (e.g. the page the user was on before
@@ -7,17 +17,9 @@ const RESTORE_PATH_KEY = "mimir-restore-path";
  */
 export function getRestorePath(): string | null {
   if (typeof window === "undefined") return null;
-  const path = sessionStorage.getItem(RESTORE_PATH_KEY);
+  const path = sessionStorage.getItem(RESTORE_KEY);
   if (path) {
-    sessionStorage.removeItem(RESTORE_PATH_KEY);
+    sessionStorage.removeItem(RESTORE_KEY);
   }
   return path;
-}
-
-/**
- * Saves the current path so it can be restored after sign-in (UX-04).
- */
-export function saveRestorePath(path: string): void {
-  if (typeof window === "undefined") return;
-  sessionStorage.setItem(RESTORE_PATH_KEY, path);
 }
