@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-00-PLAN.md — Wave 0: vitest + test infrastructure, test stubs for all requirements
 - [x] 01-01-PLAN.md — Project scaffold, D1 schema, Tailwind/shadcn setup, security middleware
-- [ ] 01-02-PLAN.md — Better Auth configuration, auth API, rate limiting, Turnstile enforcement, SSRF boundary
+- [x] 01-02-PLAN.md — Better Auth configuration, auth API, rate limiting, Turnstile enforcement, SSRF boundary
 - [ ] 01-03-PLAN.md — Auth UI screens (sign-up, sign-in, forgot-password, verify-email), OAuth error handling
 - [ ] 01-04-PLAN.md — App shell, responsive navigation, session persistence, empty state
 
