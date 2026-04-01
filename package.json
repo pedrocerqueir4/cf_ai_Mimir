@@ -11,6 +11,8 @@
   "license": "ISC",
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.14.0",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
     "vitest": "^4.1.2"
   }
 }
