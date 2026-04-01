@@ -29,12 +29,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can reset a forgotten password via an emailed link
   4. User session persists across browser refresh and tab close/reopen
   5. The UI is mobile-first with all interactive elements meeting 48px minimum tap targets and thumb-zone navigation
-**Plans**: 4 plans
+**Plans**: 5 plans
 
 Plans:
+- [ ] 01-00-PLAN.md — Wave 0: vitest + test infrastructure, test stubs for all requirements
 - [ ] 01-01-PLAN.md — Project scaffold, D1 schema, Tailwind/shadcn setup, security middleware
-- [ ] 01-02-PLAN.md — Better Auth configuration, auth API, rate limiting, session enforcement
-- [ ] 01-03-PLAN.md — Auth UI screens (sign-up, sign-in, forgot-password, verify-email)
+- [ ] 01-02-PLAN.md — Better Auth configuration, auth API, rate limiting, Turnstile enforcement, SSRF boundary
+- [ ] 01-03-PLAN.md — Auth UI screens (sign-up, sign-in, forgot-password, verify-email), OAuth error handling
 - [ ] 01-04-PLAN.md — App shell, responsive navigation, session persistence, empty state
 
 **UI hint**: yes
@@ -83,7 +84,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/4 | Planning complete | - |
+| 1. Foundation | 0/5 | Planning complete | - |
 | 2. AI Content Pipeline | 0/TBD | Not started | - |
 | 3. Gamification | 0/TBD | Not started | - |
 | 4. Multiplayer Battles | 0/TBD | Not started | - |
