@@ -53,7 +53,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **UX-01**: User can see a visual roadmap of their learning path with progress indicators
 - [ ] **UX-02**: User receives immediate feedback on quiz answers (correct/wrong with explanation)
-- [ ] **UX-03**: UI is mobile-first with thumb-zone navigation and minimum 48px tap targets
+- [x] **UX-03**: UI is mobile-first with thumb-zone navigation and minimum 48px tap targets
 - [ ] **UX-04**: User can resume learning exactly where they left off across sessions
 
 ### Security
@@ -123,7 +123,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-02 | Phase 1 | Complete |
 | SEC-03 | Phase 1 | Complete |
 | SEC-04 | Phase 1 | Complete |
-| UX-03 | Phase 1 | Pending |
+| UX-03 | Phase 1 | Complete |
 | UX-04 | Phase 1 | Pending |
 | CONT-01 | Phase 2 | Pending |
 | CONT-02 | Phase 2 | Pending |
