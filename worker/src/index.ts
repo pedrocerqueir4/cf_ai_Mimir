@@ -3,6 +3,10 @@ import { cors } from "hono/cors";
 import { sanitize } from "./middleware/sanitize";
 import { createAuth } from "./auth";
 import { authGuard } from "./middleware/auth-guard";
+import { authRateLimit } from "./middleware/rate-limit";
+import {
+  requireTurnstileAfterFailures,
+} from "./middleware/verify-turnstile";
 
 type Env = {
   DB: D1Database;
@@ -21,7 +25,11 @@ const app = new Hono<{ Bindings: Env }>();
 app.use("/*", cors());
 app.use("/api/*", sanitize);
 
-// Rate limiting and Turnstile imports will be added below (Task 2)
+// Rate limit all auth endpoints (SEC-02)
+app.use("/api/auth/*", authRateLimit);
+
+// D-05: Turnstile enforcement on sign-in after 5 failures
+app.post("/api/auth/sign-in/*", requireTurnstileAfterFailures);
 
 // Better Auth handles all auth routes
 app.on(["GET", "POST"], "/api/auth/*", (c) => {
