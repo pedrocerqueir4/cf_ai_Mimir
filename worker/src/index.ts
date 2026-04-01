@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { sanitize } from "./middleware/sanitize";
+import { createAuth } from "./auth";
+import { authGuard } from "./middleware/auth-guard";
 
 type Env = {
   DB: D1Database;
@@ -19,7 +21,22 @@ const app = new Hono<{ Bindings: Env }>();
 app.use("/*", cors());
 app.use("/api/*", sanitize);
 
-// Auth routes will be mounted in Plan 02
+// Rate limiting and Turnstile imports will be added below (Task 2)
+
+// Better Auth handles all auth routes
+app.on(["GET", "POST"], "/api/auth/*", (c) => {
+  const auth = createAuth(c.env);
+  return auth.handler(c.req.raw);
+});
+
+// Protected routes use authGuard middleware
+app.use("/api/protected/*", authGuard);
+
+// Example protected endpoint to verify auth works
+app.get("/api/protected/me", (c) => {
+  const userId = c.get("userId");
+  return c.json({ userId });
+});
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
