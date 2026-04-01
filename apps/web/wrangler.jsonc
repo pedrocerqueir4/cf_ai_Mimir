@@ -1,0 +1,23 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "mimir-web",
+	"compatibility_date": "2025-04-04",
+	"main": "./workers/app.ts",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true
+	},
+	"upload_source_maps": true,
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "mimir-db",
+			"database_id": "local"
+		}
+	],
+	"vars": {
+		"PUBLIC_URL": "http://localhost:5173"
+	}
+}
