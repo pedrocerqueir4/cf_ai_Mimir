@@ -346,12 +346,13 @@ export default function ChatPage() {
               const data = line.slice(6).trim();
               if (data === "[DONE]") continue;
               try {
-                const parsed = JSON.parse(data) as { text?: string };
-                if (parsed.text) {
+                const parsed = JSON.parse(data) as { response?: string; text?: string };
+                const token = parsed.response ?? parsed.text;
+                if (token) {
                   setMessages((prev) =>
                     prev.map((m) =>
                       m.id === aiMsgId
-                        ? { ...m, content: m.content + parsed.text }
+                        ? { ...m, content: m.content + token }
                         : m
                     )
                   );
