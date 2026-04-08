@@ -4,6 +4,8 @@ import { cors } from "hono/cors";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { multiSession } from "better-auth/plugins";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "../../../worker/src/db/schema";
 
 declare module "react-router" {
   export interface AppLoadContext {
@@ -24,10 +26,13 @@ interface AppEnv {
   TURNSTILE_SECRET_KEY: string;
 }
 
-function createAuth(env: AppEnv) {
+function createAuth(env: AppEnv, requestUrl: string) {
+  const db = drizzle(env.DB, { schema });
+  const baseURL = env.PUBLIC_URL || new URL(requestUrl).origin;
   return betterAuth({
-    database: drizzleAdapter(env.DB, { provider: "sqlite", usePlural: true }),
-    trustedOrigins: [env.PUBLIC_URL || "http://localhost:5173"],
+    baseURL,
+    database: drizzleAdapter(db, { provider: "sqlite", usePlural: true, schema }),
+    trustedOrigins: [baseURL],
     session: {
       expiresIn: 60 * 60 * 24 * 7,
       cookieCache: { enabled: true, maxAge: 5 * 60 },
@@ -72,7 +77,7 @@ const api = new Hono<{ Bindings: AppEnv }>();
 api.use("/*", cors());
 
 api.on(["GET", "POST"], "/api/auth/*", (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, c.req.url);
   return auth.handler(c.req.raw);
 });
 
