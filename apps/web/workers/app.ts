@@ -6,6 +6,9 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { multiSession } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../../worker/src/db/schema";
+import { chatRoutes } from "../../../worker/src/routes/chat";
+import { roadmapRoutes } from "../../../worker/src/routes/roadmaps";
+import { qaRoutes } from "../../../worker/src/routes/qa";
 
 declare module "react-router" {
   export interface AppLoadContext {
@@ -24,6 +27,9 @@ interface AppEnv {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   TURNSTILE_SECRET_KEY: string;
+  AI: Ai;
+  VECTORIZE: VectorizeIndex;
+  CONTENT_WORKFLOW: Workflow;
 }
 
 function createAuth(env: AppEnv, requestUrl: string) {
@@ -85,6 +91,10 @@ api.on(["GET", "POST"], "/api/auth/*", (c) => {
 });
 
 api.get("/api/health", (c) => c.json({ status: "ok" }));
+
+api.route("/api/chat", chatRoutes);
+api.route("/api/roadmaps", roadmapRoutes);
+api.route("/api/qa", qaRoutes);
 
 // React Router for everything else
 const requestHandler = createRequestHandler(
