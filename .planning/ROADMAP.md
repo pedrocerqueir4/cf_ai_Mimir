@@ -58,7 +58,7 @@ Plans:
 - [x] 02-03-PLAN.md — API routes: chat (streaming + workflow trigger), roadmaps (CRUD + quiz answer), Q&A (RAG with citations)
 - [x] 02-04-PLAN.md — Navigation update (5 tabs) + buddy chat screen (streaming, generation progress, message bubbles)
 - [x] 02-05-PLAN.md — Roadmaps list page + roadmap detail with node tree visualization (linear/branching)
-- [ ] 02-06-PLAN.md — Lesson view (Markdown content + inline quiz with instant feedback) + practice quiz mode
+- [x] 02-06-PLAN.md — Lesson view (Markdown content + inline quiz with instant feedback) + practice quiz mode
 - [ ] 02-07-PLAN.md — RAG Q&A: in-lesson bottom sheet + roadmap-level Q&A tab with citation links
 - [ ] 02-08-PLAN.md — Integration verification checkpoint (human end-to-end verification)
 
@@ -96,6 +96,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/5 | In Progress|  |
-| 2. AI Content Pipeline | 6/9 | In Progress|  |
+| 2. AI Content Pipeline | 7/9 | In Progress|  |
 | 3. Gamification | 0/TBD | Not started | - |
 | 4. Multiplayer Battles | 0/TBD | Not started | - |

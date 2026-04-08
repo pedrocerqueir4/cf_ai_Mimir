@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-ai-content-pipeline 02-05-PLAN.md
-last_updated: "2026-04-08T14:27:28.296Z"
+stopped_at: Completed 02-ai-content-pipeline 02-06-PLAN.md
+last_updated: "2026-04-08T14:33:27.535Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 14
-  completed_plans: 11
+  completed_plans: 12
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 02 (ai-content-pipeline) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-04-08
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-ai-content-pipeline P04 | 3min | 2 tasks | 6 files |
 | Phase 02-ai-content-pipeline P03 | 3min | 2 tasks | 4 files |
 | Phase 02-ai-content-pipeline P05 | 2min | 2 tasks | 4 files |
+| Phase 02-ai-content-pipeline P06 | 3min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,9 @@ Recent decisions affecting current work:
 - [Phase 02-ai-content-pipeline]: Complexity derived client-side: branching if any node has parentId !== null or non-empty children array — no API change needed
 - [Phase 02-ai-content-pipeline]: completedLessonIds derived from pre-computed node.state === completed — avoids double computation, supports both API-state and client-computed modes
 - [Phase 02-ai-content-pipeline]: Q&A tab in roadmap detail renders placeholder per plan spec — Plan 07 replaces with full RAG Q&A interface
+- [Phase 02-ai-content-pipeline]: QuizQuestion uses 3-phase state machine (idle/submitting/answered) to atomically lock options and render feedback — prevents double-submit race conditions
+- [Phase 02-ai-content-pipeline]: Finish lesson CTA sets quizFinished boolean rather than directly calling completeLesson — separates quiz navigation from lesson completion semantics
+- [Phase 02-ai-content-pipeline]: Ask AI button stub: toast('Coming soon') — Plan 07 replaces with in-lesson Q&A bottom sheet; button presence required by plan spec
 
 ### Pending Todos
 
@@ -119,6 +123,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-08T14:27:28.292Z
-Stopped at: Completed 02-ai-content-pipeline 02-05-PLAN.md
+Last session: 2026-04-08T14:33:27.530Z
+Stopped at: Completed 02-ai-content-pipeline 02-06-PLAN.md
 Resume file: None
