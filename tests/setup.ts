@@ -49,5 +49,88 @@ export async function setupD1() {
       created_at INTEGER,
       updated_at INTEGER
     );
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      conversation_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS roadmaps (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      topic TEXT NOT NULL,
+      complexity TEXT NOT NULL DEFAULT 'linear',
+      status TEXT NOT NULL DEFAULT 'generating',
+      workflow_run_id TEXT,
+      nodes_json TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS lessons (
+      id TEXT PRIMARY KEY,
+      roadmap_id TEXT NOT NULL REFERENCES roadmaps(id) ON DELETE CASCADE,
+      node_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      "order" INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS lesson_completions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+      completed_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS quizzes (
+      id TEXT PRIMARY KEY,
+      lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS quiz_questions (
+      id TEXT PRIMARY KEY,
+      quiz_id TEXT NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+      question_text TEXT NOT NULL,
+      question_type TEXT NOT NULL,
+      options_json TEXT NOT NULL,
+      correct_option_id TEXT NOT NULL,
+      explanation TEXT NOT NULL,
+      "order" INTEGER NOT NULL
+    );
   `);
+}
+
+/** Creates a mock AI binding that returns canned JSON responses */
+export function createMockAI(responses: Record<string, unknown>) {
+  return {
+    run: async (model: string, _options: unknown) => {
+      if (model.includes("llama-3.3")) {
+        const key = Object.keys(responses).find(k => model.includes(k)) || "default";
+        return { response: JSON.stringify(responses[key] || responses["default"]) };
+      }
+      if (model.includes("bge-large")) {
+        // Return a fake 1024-dimensional embedding
+        return { data: [new Array(1024).fill(0.01)] };
+      }
+      throw new Error(`Unmocked model: ${model}`);
+    },
+  };
+}
+
+/** Creates a mock Vectorize binding for testing RAG queries */
+export function createMockVectorize(
+  results: Array<{ id: string; score: number; metadata?: Record<string, unknown> }> = []
+) {
+  return {
+    upsert: async () => ({ count: 1 }),
+    query: async () => ({
+      matches: results.map(r => ({
+        id: r.id,
+        score: r.score,
+        metadata: r.metadata || {},
+      })),
+    }),
+  };
 }
