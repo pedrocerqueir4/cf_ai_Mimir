@@ -1,0 +1,307 @@
+// Typed API client for all Phase 2 endpoints
+// All requests use credentials: "include" for cookie-based auth
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+  metadata?: {
+    type?: "generation_started" | "generation_progress" | "generation_complete" | "text";
+    workflowRunId?: string;
+    roadmapId?: string;
+  };
+}
+
+export interface RoadmapListItem {
+  id: string;
+  title: string;
+  description: string;
+  totalLessons: number;
+  completedLessons: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoadmapNode {
+  id: string;
+  lessonId: string;
+  title: string;
+  description: string;
+  order: number;
+  parentId: string | null;
+  state: "locked" | "available" | "in_progress" | "completed";
+  children: RoadmapNode[];
+}
+
+export interface RoadmapDetail {
+  id: string;
+  title: string;
+  description: string;
+  totalLessons: number;
+  completedLessons: number;
+  nodes: RoadmapNode[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuizOption {
+  id: string;
+  text: string;
+}
+
+export interface QuizQuestion {
+  id: string;
+  lessonId: string;
+  type: "mcq" | "true_false";
+  question: string;
+  options: QuizOption[];
+  // correctOptionId intentionally omitted — never sent before answer submission
+}
+
+export interface QuizAnswerResult {
+  correct: boolean;
+  correctOptionId: string;
+  explanation: string;
+}
+
+export interface LessonDetail {
+  id: string;
+  roadmapId: string;
+  title: string;
+  content: string;
+  order: number;
+  state: "locked" | "available" | "in_progress" | "completed";
+  questions: QuizQuestion[];
+}
+
+export interface QAResponse {
+  answer: string;
+  citations: Array<{
+    lessonId: string;
+    lessonTitle: string;
+    lessonOrder: number;
+  }>;
+}
+
+export interface GenerationStatus {
+  status: "pending" | "generating" | "complete" | "failed";
+  roadmapId?: string;
+  step?: 1 | 2 | 3;
+}
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Send a chat message. Returns a Response for SSE streaming, or resolves
+ * immediately with { type: "generation_started", workflowRunId } JSON for
+ * roadmap generation requests.
+ */
+export async function sendChatMessage(
+  message: string,
+  conversationId: string
+): Promise<Response> {
+  const response = await fetch("/api/chat/message", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({ message, conversationId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Chat message failed: ${response.status}`);
+  }
+
+  return response;
+}
+
+/**
+ * Fetch all messages in a conversation.
+ */
+export async function fetchConversationMessages(
+  conversationId: string
+): Promise<ChatMessage[]> {
+  const response = await fetch(
+    `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch messages: ${response.status}`);
+  }
+
+  return response.json() as Promise<ChatMessage[]>;
+}
+
+/**
+ * Poll workflow generation status.
+ */
+export async function pollGenerationStatus(
+  workflowRunId: string
+): Promise<GenerationStatus> {
+  const response = await fetch(
+    `/api/chat/status/${encodeURIComponent(workflowRunId)}`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to poll generation status: ${response.status}`);
+  }
+
+  return response.json() as Promise<GenerationStatus>;
+}
+
+// ─── Roadmaps ─────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch all roadmaps for the current user.
+ */
+export async function fetchRoadmaps(): Promise<RoadmapListItem[]> {
+  const response = await fetch("/api/roadmaps", {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch roadmaps: ${response.status}`);
+  }
+
+  return response.json() as Promise<RoadmapListItem[]>;
+}
+
+/**
+ * Fetch a single roadmap with full node tree.
+ */
+export async function fetchRoadmapDetail(id: string): Promise<RoadmapDetail> {
+  const response = await fetch(
+    `/api/roadmaps/${encodeURIComponent(id)}`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch roadmap: ${response.status}`);
+  }
+
+  return response.json() as Promise<RoadmapDetail>;
+}
+
+/**
+ * Fetch a specific lesson within a roadmap.
+ */
+export async function fetchLesson(
+  roadmapId: string,
+  lessonId: string
+): Promise<LessonDetail> {
+  const response = await fetch(
+    `/api/roadmaps/${encodeURIComponent(roadmapId)}/lessons/${encodeURIComponent(lessonId)}`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch lesson: ${response.status}`);
+  }
+
+  return response.json() as Promise<LessonDetail>;
+}
+
+/**
+ * Submit an answer to a quiz question. Returns correctness and explanation.
+ */
+export async function submitQuizAnswer(
+  questionId: string,
+  selectedOptionId: string
+): Promise<QuizAnswerResult> {
+  const response = await fetch("/api/quiz/answer", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({ questionId, selectedOptionId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to submit quiz answer: ${response.status}`);
+  }
+
+  return response.json() as Promise<QuizAnswerResult>;
+}
+
+/**
+ * Mark a lesson as complete and record XP.
+ */
+export async function completeLesson(
+  roadmapId: string,
+  lessonId: string
+): Promise<void> {
+  const response = await fetch(
+    `/api/roadmaps/${encodeURIComponent(roadmapId)}/lessons/${encodeURIComponent(lessonId)}/complete`,
+    {
+      method: "POST",
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to complete lesson: ${response.status}`);
+  }
+}
+
+/**
+ * Fetch practice quiz questions for a roadmap (questions from completed lessons).
+ */
+export async function fetchPracticeQuiz(
+  roadmapId: string
+): Promise<QuizQuestion[]> {
+  const response = await fetch(
+    `/api/roadmaps/${encodeURIComponent(roadmapId)}/quiz`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch practice quiz: ${response.status}`);
+  }
+
+  return response.json() as Promise<QuizQuestion[]>;
+}
+
+// ─── Q&A ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Ask an AI question scoped to a roadmap (and optionally a specific lesson).
+ * Uses Vectorize-backed RAG for contextual answers with lesson citations.
+ */
+export async function askQuestion(
+  question: string,
+  roadmapId: string,
+  lessonId?: string
+): Promise<QAResponse> {
+  const response = await fetch("/api/qa/ask", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({ question, roadmapId, lessonId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to ask question: ${response.status}`);
+  }
+
+  return response.json() as Promise<QAResponse>;
+}

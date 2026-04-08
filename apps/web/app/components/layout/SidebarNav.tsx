@@ -1,9 +1,10 @@
-import { Home, BookOpen, Swords, User } from "lucide-react";
+import { Home, MessageCircle, Map, Swords, User } from "lucide-react";
 import { NavLink } from "react-router";
 
 const NAV_ITEMS = [
   { to: "/", label: "Home", icon: Home },
-  { to: "/learn", label: "Learn", icon: BookOpen },
+  { to: "/chat", label: "Chat", icon: MessageCircle },
+  { to: "/roadmaps", label: "Roadmaps", icon: Map },
   { to: "/battle", label: "Battle", icon: Swords },
   { to: "/profile", label: "Profile", icon: User },
 ] as const;
