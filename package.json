@@ -4,7 +4,7 @@
   "description": "AI-powered gamified micro-learning platform on Cloudflare",
   "type": "module",
   "scripts": {
-    "test": "vitest run --config worker/vitest.config.ts"
+    "test": "vitest run --config worker/vitest.config.mts"
   },
   "keywords": [],
   "author": "",
