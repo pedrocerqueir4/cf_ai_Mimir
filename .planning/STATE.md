@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-ai-content-pipeline 02-00-PLAN.md
-last_updated: "2026-04-08T13:58:54.741Z"
+stopped_at: Completed 02-ai-content-pipeline 02-01-PLAN.md
+last_updated: "2026-04-08T14:05:49.669Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 14
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 02 (ai-content-pipeline) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-04-08
 
@@ -58,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-foundation P03 | 3 | 2 tasks | 12 files |
 | Phase 01-foundation P04 | 4 | 1 tasks | 7 files |
 | Phase 02-ai-content-pipeline P00 | 3 | 2 tasks | 5 files |
+| Phase 02-ai-content-pipeline P01 | 8 | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,9 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: NavLink end prop required for root path / — prevents Home tab being always-active on all routes
 - [Phase 01-foundation]: AppShell dual header pattern (lg:hidden + hidden lg:flex) for responsive ThemeToggle placement — avoids conditional rendering complexity
 - [Phase 02-ai-content-pipeline]: vitest.config.ts renamed to .mts — rolldown (vitest 4.x) cannot require ESM-only @cloudflare/vitest-pool-workers; .mts forces native ESM loading
+- [Phase 02-ai-content-pipeline]: correctOptionId never returned to client before answer submission — enforced at schema level and API layer
+- [Phase 02-ai-content-pipeline]: chunkText uses 300-word chunks for bge-large-en-v1.5 (not 350) — safer margin below 512-token limit
+- [Phase 02-ai-content-pipeline]: Vectorize remote index provisioning deferred to deployment — requires CLOUDFLARE_API_TOKEN
 
 ### Pending Todos
 
@@ -101,6 +105,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-08T13:58:54.733Z
-Stopped at: Completed 02-ai-content-pipeline 02-00-PLAN.md
+Last session: 2026-04-08T14:05:49.665Z
+Stopped at: Completed 02-ai-content-pipeline 02-01-PLAN.md
 Resume file: None

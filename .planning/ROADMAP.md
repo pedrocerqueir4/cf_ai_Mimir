@@ -53,7 +53,7 @@ Plans:
 **Plans**: 9 plans
 Plans:
 - [x] 02-00-PLAN.md — Wave 0: test stubs for all requirements, AI/Vectorize mock bindings in test setup
-- [ ] 02-01-PLAN.md — D1 schema extension (6 tables), Cloudflare bindings (AI/Vectorize/Workflows), Zod validation schemas, shadcn components
+- [x] 02-01-PLAN.md — D1 schema extension (6 tables), Cloudflare bindings (AI/Vectorize/Workflows), Zod validation schemas, shadcn components
 - [ ] 02-02-PLAN.md — ContentGenerationWorkflow (4-step durable pipeline: roadmap, lessons, quizzes, embeddings)
 - [ ] 02-03-PLAN.md — API routes: chat (streaming + workflow trigger), roadmaps (CRUD + quiz answer), Q&A (RAG with citations)
 - [ ] 02-04-PLAN.md — Navigation update (5 tabs) + buddy chat screen (streaming, generation progress, message bubbles)
@@ -96,6 +96,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/5 | In Progress|  |
-| 2. AI Content Pipeline | 1/9 | In Progress|  |
+| 2. AI Content Pipeline | 2/9 | In Progress|  |
 | 3. Gamification | 0/TBD | Not started | - |
 | 4. Multiplayer Battles | 0/TBD | Not started | - |
