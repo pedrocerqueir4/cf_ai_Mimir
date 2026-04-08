@@ -9,6 +9,19 @@ import {
   buildChatMessages,
   extractTopicFromMessage,
 } from "../services/content-generation.service";
+import {
+  RoadmapOutputSchema,
+  LessonOutputSchema,
+  QuizOutputSchema,
+} from "../validation/content-schemas";
+import {
+  buildRoadmapSystemPrompt,
+  buildLessonSystemPrompt,
+  buildQuizSystemPrompt,
+  ROADMAP_JSON_SCHEMA,
+  LESSON_JSON_SCHEMA,
+  QUIZ_JSON_SCHEMA,
+} from "../validation/roadmap-prompts";
 
 export const chatRoutes = new Hono<{ Bindings: Env }>();
 
@@ -54,11 +67,23 @@ chatRoutes.post("/message", sanitize, async (c) => {
   // Detect roadmap generation intent
   if (detectRoadmapIntent(trimmedMessage)) {
     const topic = extractTopicFromMessage(trimmedMessage);
+    const roadmapId = crypto.randomUUID();
 
-    // Trigger Cloudflare Workflow asynchronously
-    const instance = await c.env.CONTENT_WORKFLOW.create({
-      params: { topic, userId, conversationId },
-    });
+    // Try Cloudflare Workflow first; fall back to inline generation for local dev
+    let workflowRunId: string;
+    try {
+      const instance = await c.env.CONTENT_WORKFLOW.create({
+        params: { topic, userId, conversationId },
+      });
+      workflowRunId = instance.id;
+    } catch {
+      // Workflow binding unavailable in local dev — run inline generation
+      workflowRunId = `local-${roadmapId}`;
+      // Fire-and-forget inline generation
+      c.executionCtx.waitUntil(
+        generateRoadmapInline(c.env, topic, userId, roadmapId)
+      );
+    }
 
     // Persist assistant acknowledgment message
     await db.insert(schema.chatMessages).values({
@@ -68,14 +93,14 @@ chatRoutes.post("/message", sanitize, async (c) => {
       role: "assistant",
       content: JSON.stringify({
         type: "generation_started",
-        workflowRunId: instance.id,
+        workflowRunId,
         topic,
       }),
       createdAt: new Date(now.getTime() + 1),
     });
 
     return c.json(
-      { type: "generation_started", workflowRunId: instance.id, topic, conversationId },
+      { type: "generation_started", workflowRunId, topic, conversationId },
       202
     );
   }
@@ -223,3 +248,148 @@ chatRoutes.get("/status/:workflowRunId", async (c) => {
     roadmapId: roadmap[0].id,
   });
 });
+
+// ─── Inline generation fallback (local dev — Workflows unavailable) ──────────
+
+async function generateRoadmapInline(
+  env: Env,
+  topic: string,
+  userId: string,
+  roadmapId: string,
+) {
+  const db = drizzle(env.DB, { schema });
+
+  try {
+    // Step 1: Generate roadmap structure
+    const aiResponse = await env.AI.run(
+      "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      {
+        messages: [
+          { role: "system", content: buildRoadmapSystemPrompt() },
+          { role: "user", content: `Create a learning roadmap for: ${topic}` },
+        ],
+        response_format: { type: "json_schema", json_schema: ROADMAP_JSON_SCHEMA },
+      } as Parameters<typeof env.AI.run>[1],
+    );
+
+    const rawText =
+      typeof aiResponse === "string"
+        ? aiResponse
+        : (aiResponse as { response?: string }).response ?? JSON.stringify(aiResponse);
+
+    const validated = RoadmapOutputSchema.parse(JSON.parse(rawText));
+    const now = new Date();
+
+    await db.insert(schema.roadmaps).values({
+      id: roadmapId,
+      userId,
+      title: validated.title,
+      topic,
+      complexity: validated.complexity,
+      status: "generating",
+      workflowRunId: `local-${roadmapId}`,
+      nodesJson: JSON.stringify(validated.nodes),
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Step 2: Generate lessons for each node
+    const nodes = validated.nodes;
+    const lessonIds: string[] = [];
+
+    for (const node of nodes) {
+      const lessonId = `${roadmapId}-lesson-${node.id}`;
+
+      const lessonResponse = await env.AI.run(
+        "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+        {
+          messages: [
+            { role: "system", content: buildLessonSystemPrompt(topic, node.title, node.description ?? "") },
+            { role: "user", content: `Write the lesson for: ${node.title}` },
+          ],
+          response_format: { type: "json_schema", json_schema: LESSON_JSON_SCHEMA },
+        } as Parameters<typeof env.AI.run>[1],
+      );
+
+      const lessonRaw =
+        typeof lessonResponse === "string"
+          ? lessonResponse
+          : (lessonResponse as { response?: string }).response ?? JSON.stringify(lessonResponse);
+
+      const lessonValidated = LessonOutputSchema.parse(JSON.parse(lessonRaw));
+
+      await db.insert(schema.lessons).values({
+        id: lessonId,
+        roadmapId,
+        nodeId: node.id,
+        title: lessonValidated.title,
+        content: lessonValidated.content,
+        order: node.order,
+        createdAt: new Date(),
+      }).onConflictDoNothing();
+
+      lessonIds.push(lessonId);
+    }
+
+    // Step 3: Generate quizzes for each lesson
+    for (const lessonId of lessonIds) {
+      const lessonRows = await db.select().from(schema.lessons).where(eq(schema.lessons.id, lessonId)).limit(1);
+      if (lessonRows.length === 0) continue;
+      const lesson = lessonRows[0];
+
+      const quizResponse = await env.AI.run(
+        "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+        {
+          messages: [
+            { role: "system", content: buildQuizSystemPrompt(lesson.content) },
+            { role: "user", content: "Generate comprehension quiz questions for this lesson." },
+          ],
+          response_format: { type: "json_schema", json_schema: QUIZ_JSON_SCHEMA },
+        } as Parameters<typeof env.AI.run>[1],
+      );
+
+      const quizRaw =
+        typeof quizResponse === "string"
+          ? quizResponse
+          : (quizResponse as { response?: string }).response ?? JSON.stringify(quizResponse);
+
+      const quizValidated = QuizOutputSchema.parse(JSON.parse(quizRaw));
+      const quizId = `${lessonId}-quiz`;
+
+      await db.insert(schema.quizzes).values({
+        id: quizId,
+        lessonId,
+        createdAt: new Date(),
+      }).onConflictDoNothing();
+
+      for (let i = 0; i < quizValidated.questions.length; i++) {
+        const q = quizValidated.questions[i];
+        await db.insert(schema.quizQuestions).values({
+          id: `${quizId}-q${i}`,
+          quizId,
+          questionText: q.questionText,
+          questionType: q.questionType,
+          optionsJson: JSON.stringify(q.options),
+          correctOptionId: q.correctOptionId,
+          explanation: q.explanation,
+          order: i,
+        }).onConflictDoNothing();
+      }
+    }
+
+    // Step 4: Skip embeddings in local dev (Vectorize not available locally)
+    // Mark roadmap complete
+    await db.update(schema.roadmaps)
+      .set({ status: "complete", updatedAt: new Date() })
+      .where(eq(schema.roadmaps.id, roadmapId));
+
+    console.log(`[DEV] Inline roadmap generation complete: ${roadmapId}`);
+  } catch (error) {
+    console.error("[DEV] Inline generation failed:", error);
+    try {
+      await db.update(schema.roadmaps)
+        .set({ status: "failed", updatedAt: new Date() })
+        .where(eq(schema.roadmaps.id, roadmapId));
+    } catch { /* best effort */ }
+  }
+}
