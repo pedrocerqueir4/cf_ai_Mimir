@@ -28,11 +28,14 @@ interface AppEnv {
 
 function createAuth(env: AppEnv, requestUrl: string) {
   const db = drizzle(env.DB, { schema });
-  const baseURL = env.PUBLIC_URL || new URL(requestUrl).origin;
+  const requestOrigin = new URL(requestUrl).origin;
+  const baseURL = env.PUBLIC_URL || requestOrigin;
+  // Trust both configured PUBLIC_URL and the actual request origin (handles network IP access in dev)
+  const origins = new Set([baseURL, requestOrigin]);
   return betterAuth({
-    baseURL,
+    baseURL: requestOrigin,
     database: drizzleAdapter(db, { provider: "sqlite", usePlural: true, schema }),
-    trustedOrigins: [baseURL],
+    trustedOrigins: [...origins],
     session: {
       expiresIn: 60 * 60 * 24 * 7,
       cookieCache: { enabled: true, maxAge: 5 * 60 },
