@@ -56,7 +56,7 @@ Plans:
 - [x] 02-01-PLAN.md — D1 schema extension (6 tables), Cloudflare bindings (AI/Vectorize/Workflows), Zod validation schemas, shadcn components
 - [x] 02-02-PLAN.md — ContentGenerationWorkflow (4-step durable pipeline: roadmap, lessons, quizzes, embeddings)
 - [ ] 02-03-PLAN.md — API routes: chat (streaming + workflow trigger), roadmaps (CRUD + quiz answer), Q&A (RAG with citations)
-- [ ] 02-04-PLAN.md — Navigation update (5 tabs) + buddy chat screen (streaming, generation progress, message bubbles)
+- [x] 02-04-PLAN.md — Navigation update (5 tabs) + buddy chat screen (streaming, generation progress, message bubbles)
 - [ ] 02-05-PLAN.md — Roadmaps list page + roadmap detail with node tree visualization (linear/branching)
 - [ ] 02-06-PLAN.md — Lesson view (Markdown content + inline quiz with instant feedback) + practice quiz mode
 - [ ] 02-07-PLAN.md — RAG Q&A: in-lesson bottom sheet + roadmap-level Q&A tab with citation links
