@@ -14,7 +14,24 @@
 		{
 			"binding": "DB",
 			"database_name": "mimir-db",
-			"database_id": "local"
+			"database_id": "local",
+			"migrations_dir": "../worker/src/db/migrations"
+		}
+	],
+	"ai": {
+		"binding": "AI"
+	},
+	"vectorize": [
+		{
+			"binding": "VECTORIZE",
+			"index_name": "mimir-lessons"
+		}
+	],
+	"workflows": [
+		{
+			"name": "content-generation",
+			"binding": "CONTENT_WORKFLOW",
+			"class_name": "ContentGenerationWorkflow"
 		}
 	],
 	"vars": {

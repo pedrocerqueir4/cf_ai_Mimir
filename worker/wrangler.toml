@@ -21,5 +21,17 @@ type = "ratelimit"
 namespace_id = "1002"
 simple = { limit = 5, period = 60 }
 
+[ai]
+binding = "AI"
+
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "mimir-lessons"
+
+[[workflows]]
+name = "content-generation"
+binding = "CONTENT_WORKFLOW"
+class_name = "ContentGenerationWorkflow"
+
 [vars]
 PUBLIC_URL = "http://localhost:5173"
