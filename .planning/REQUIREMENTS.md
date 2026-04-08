@@ -18,12 +18,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### AI Content Generation
 
-- [ ] **CONT-01**: User describes a topic via chat prompt and AI generates a structured learning roadmap
-- [ ] **CONT-02**: AI adapts roadmap format based on topic complexity — linear for simple topics, branching skill-tree for complex topics
-- [ ] **CONT-03**: AI generates bite-sized lessons (2-10 min) scoped to a single concept
-- [ ] **CONT-04**: Each lesson includes mixed content: reading material and comprehension quizzes
-- [ ] **CONT-05**: Content generation begins streaming response within 2 seconds of prompt submission
-- [ ] **CONT-06**: Content generation pipeline handles failures gracefully with step-level retries via Cloudflare Workflows
+- [x] **CONT-01**: User describes a topic via chat prompt and AI generates a structured learning roadmap
+- [x] **CONT-02**: AI adapts roadmap format based on topic complexity — linear for simple topics, branching skill-tree for complex topics
+- [x] **CONT-03**: AI generates bite-sized lessons (2-10 min) scoped to a single concept
+- [x] **CONT-04**: Each lesson includes mixed content: reading material and comprehension quizzes
+- [x] **CONT-05**: Content generation begins streaming response within 2 seconds of prompt submission
+- [x] **CONT-06**: Content generation pipeline handles failures gracefully with step-level retries via Cloudflare Workflows
 
 ### Gamification
 
@@ -44,10 +44,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### AI Q&A
 
-- [ ] **QNA-01**: User can ask questions about lesson content during a lesson and receive RAG-backed answers
-- [ ] **QNA-02**: User can access a standalone Q&A section to query any of their learning content
-- [ ] **QNA-03**: AI answers are scoped to the user's own generated content via Vectorize embeddings
-- [ ] **QNA-04**: AI Q&A responses cite which lesson/section the answer came from
+- [x] **QNA-01**: User can ask questions about lesson content during a lesson and receive RAG-backed answers
+- [x] **QNA-02**: User can access a standalone Q&A section to query any of their learning content
+- [x] **QNA-03**: AI answers are scoped to the user's own generated content via Vectorize embeddings
+- [x] **QNA-04**: AI Q&A responses cite which lesson/section the answer came from
 
 ### Learning UX
 
@@ -125,16 +125,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-04 | Phase 1 | Complete |
 | UX-03 | Phase 1 | Complete |
 | UX-04 | Phase 1 | Complete |
-| CONT-01 | Phase 2 | Pending |
-| CONT-02 | Phase 2 | Pending |
-| CONT-03 | Phase 2 | Pending |
-| CONT-04 | Phase 2 | Pending |
-| CONT-05 | Phase 2 | Pending |
-| CONT-06 | Phase 2 | Pending |
-| QNA-01 | Phase 2 | Pending |
-| QNA-02 | Phase 2 | Pending |
-| QNA-03 | Phase 2 | Pending |
-| QNA-04 | Phase 2 | Pending |
+| CONT-01 | Phase 2 | Complete |
+| CONT-02 | Phase 2 | Complete |
+| CONT-03 | Phase 2 | Complete |
+| CONT-04 | Phase 2 | Complete |
+| CONT-05 | Phase 2 | Complete |
+| CONT-06 | Phase 2 | Complete |
+| QNA-01 | Phase 2 | Complete |
+| QNA-02 | Phase 2 | Complete |
+| QNA-03 | Phase 2 | Complete |
+| QNA-04 | Phase 2 | Complete |
 | UX-01 | Phase 2 | Pending |
 | UX-02 | Phase 2 | Pending |
 | GAME-01 | Phase 3 | Pending |
