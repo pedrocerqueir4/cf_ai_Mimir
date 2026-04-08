@@ -1,18 +1,33 @@
+import { useState } from "react";
 import { Button } from "~/components/ui/button";
-import { signIn } from "~/lib/auth-client";
+import { Alert, AlertDescription } from "~/components/ui/alert";
 
 interface OAuthButtonsProps {
   mode: "sign-in" | "sign-up";
 }
 
 export function OAuthButtons({ mode: _mode }: OAuthButtonsProps) {
+  const [warning, setWarning] = useState(false);
+
+  function handleOAuthClick() {
+    setWarning(true);
+    setTimeout(() => setWarning(false), 4000);
+  }
+
   return (
     <div className="flex flex-col gap-3">
+      {warning && (
+        <Alert>
+          <AlertDescription>
+            Social sign-in is not available at the moment. Please use email and password.
+          </AlertDescription>
+        </Alert>
+      )}
       <Button
         type="button"
         variant="outline"
         className="min-h-12 w-full"
-        onClick={() => signIn.social({ provider: "google" })}
+        onClick={handleOAuthClick}
       >
         {/* Google icon SVG — 20x20 */}
         <svg
@@ -43,7 +58,7 @@ export function OAuthButtons({ mode: _mode }: OAuthButtonsProps) {
         type="button"
         variant="outline"
         className="min-h-12 w-full"
-        onClick={() => signIn.social({ provider: "github" })}
+        onClick={handleOAuthClick}
       >
         {/* GitHub icon SVG — 20x20 */}
         <svg
