@@ -10,6 +10,9 @@ import { chatRoutes } from "../../../worker/src/routes/chat";
 import { roadmapRoutes } from "../../../worker/src/routes/roadmaps";
 import { qaRoutes } from "../../../worker/src/routes/qa";
 
+// Re-export Workflow entrypoint so Miniflare can find the named entrypoint
+export { ContentGenerationWorkflow } from "../../../worker/src/workflows/ContentGenerationWorkflow";
+
 declare module "react-router" {
   export interface AppLoadContext {
     cloudflare: {
