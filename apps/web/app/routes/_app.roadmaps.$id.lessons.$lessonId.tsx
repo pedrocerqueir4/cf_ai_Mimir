@@ -8,6 +8,7 @@ import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import { LessonContent } from "~/components/lesson/LessonContent";
 import { QuizQuestion } from "~/components/lesson/QuizQuestion";
+import { InLessonQASheet } from "~/components/qa/InLessonQASheet";
 import { fetchLesson, completeLesson } from "~/lib/api-client";
 
 /**
@@ -30,6 +31,9 @@ export default function LessonPage() {
   }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  // Controls the in-lesson Q&A bottom sheet (Plan 07, D-17)
+  const [qaOpen, setQaOpen] = useState(false);
 
   // Track which question index is currently visible (0-based)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -126,7 +130,7 @@ export default function LessonPage() {
   }
 
   function handleAskAI() {
-    toast.info("Coming soon");
+    setQaOpen(true);
   }
 
   // ─── Data State ───────────────────────────────────────────────────────────────
@@ -219,9 +223,10 @@ export default function LessonPage() {
         </div>
       )}
 
-      {/* Fixed footer: "Ask AI" button — bottom sheet wired in Plan 07 */}
+      {/* Fixed footer: "Ask AI" button (D-17) */}
       <div className="fixed bottom-16 lg:bottom-0 left-0 right-0 bg-background border-t border-border px-4 py-3 flex justify-center">
         <Button
+          id="ask-ai-btn"
           variant="outline"
           className="gap-2"
           onClick={handleAskAI}
@@ -231,6 +236,16 @@ export default function LessonPage() {
           Ask AI
         </Button>
       </div>
+
+      {/* In-lesson Q&A bottom sheet (QNA-01, D-17) */}
+      {roadmapId && lessonId && (
+        <InLessonQASheet
+          open={qaOpen}
+          onOpenChange={setQaOpen}
+          roadmapId={roadmapId}
+          lessonId={lessonId}
+        />
+      )}
     </div>
   );
 }

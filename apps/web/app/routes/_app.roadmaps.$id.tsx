@@ -5,6 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Skeleton } from "~/components/ui/skeleton";
 import { RoadmapNodeTree } from "~/components/roadmap/RoadmapNodeTree";
+import { QAThread } from "~/components/qa/QAThread";
 import { fetchRoadmapDetail } from "~/lib/api-client";
 
 export default function RoadmapDetailPage() {
@@ -108,11 +109,13 @@ export default function RoadmapDetailPage() {
           />
         </TabsContent>
 
-        {/* Q&A Tab — placeholder (Plan 07 will replace with full Q&A) */}
-        <TabsContent value="qna" className="mt-4 px-4">
-          <p className="text-base text-muted-foreground text-center py-8">
-            Q&A coming soon
-          </p>
+        {/* Q&A Tab — roadmap-scoped RAG Q&A (QNA-02, D-14) */}
+        <TabsContent value="qna" className="mt-0 h-[calc(100vh-12rem)]">
+          <QAThread
+            roadmapId={roadmap.id}
+            placeholder="Ask about this roadmap..."
+            emptyText={`Ask anything about your ${roadmap.title} content.`}
+          />
         </TabsContent>
       </Tabs>
     </div>
