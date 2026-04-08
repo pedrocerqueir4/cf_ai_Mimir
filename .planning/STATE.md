@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-ai-content-pipeline 02-01-PLAN.md
-last_updated: "2026-04-08T14:05:49.669Z"
+stopped_at: Completed 02-ai-content-pipeline 02-02-PLAN.md
+last_updated: "2026-04-08T14:10:25.839Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 14
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 02 (ai-content-pipeline) — EXECUTING
-Plan: 3 of 9
+Plan: 4 of 9
 Status: Ready to execute
 Last activity: 2026-04-08
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-foundation P04 | 4 | 1 tasks | 7 files |
 | Phase 02-ai-content-pipeline P00 | 3 | 2 tasks | 5 files |
 | Phase 02-ai-content-pipeline P01 | 8 | 2 tasks | 14 files |
+| Phase 02-ai-content-pipeline P02 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Recent decisions affecting current work:
 - [Phase 02-ai-content-pipeline]: correctOptionId never returned to client before answer submission — enforced at schema level and API layer
 - [Phase 02-ai-content-pipeline]: chunkText uses 300-word chunks for bge-large-en-v1.5 (not 350) — safer margin below 512-token limit
 - [Phase 02-ai-content-pipeline]: Vectorize remote index provisioning deferred to deployment — requires CLOUDFLARE_API_TOKEN
+- [Phase 02-ai-content-pipeline]: Store-in-step pattern confirmed: all AI generation writes content to D1 within step.do(), returns only IDs — validates 1MiB limit mitigation
+- [Phase 02-ai-content-pipeline]: detectRoadmapIntent uses keyword heuristic (not AI classifier) — confirmation step added at API layer before Workflow trigger
 
 ### Pending Todos
 
@@ -105,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-08T14:05:49.665Z
-Stopped at: Completed 02-ai-content-pipeline 02-01-PLAN.md
+Last session: 2026-04-08T14:10:25.834Z
+Stopped at: Completed 02-ai-content-pipeline 02-02-PLAN.md
 Resume file: None
