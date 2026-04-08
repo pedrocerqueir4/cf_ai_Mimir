@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-ai-content-pipeline 02-03-PLAN.md
-last_updated: "2026-04-08T14:22:20.322Z"
+stopped_at: Completed 02-ai-content-pipeline 02-05-PLAN.md
+last_updated: "2026-04-08T14:27:28.296Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 14
-  completed_plans: 10
+  completed_plans: 11
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 02 (ai-content-pipeline) — EXECUTING
-Plan: 6 of 9
+Plan: 7 of 9
 Status: Ready to execute
 Last activity: 2026-04-08
 
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-ai-content-pipeline P02 | 2min | 2 tasks | 2 files |
 | Phase 02-ai-content-pipeline P04 | 3min | 2 tasks | 6 files |
 | Phase 02-ai-content-pipeline P03 | 3min | 2 tasks | 4 files |
+| Phase 02-ai-content-pipeline P05 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,9 @@ Recent decisions affecting current work:
 - [Phase 02-ai-content-pipeline]: SSE streaming for conversational chat, 202+workflowRunId for roadmap generation — two distinct interaction models never conflated
 - [Phase 02-ai-content-pipeline]: correctOptionId and explanation stripped at Drizzle select level in GET lesson/practice quiz endpoints — cannot leak via response shaping bug
 - [Phase 02-ai-content-pipeline]: Vectorize RAG filter uses roadmapId+userId — tighter scoping prevents cross-roadmap content bleed
+- [Phase 02-ai-content-pipeline]: Complexity derived client-side: branching if any node has parentId !== null or non-empty children array — no API change needed
+- [Phase 02-ai-content-pipeline]: completedLessonIds derived from pre-computed node.state === completed — avoids double computation, supports both API-state and client-computed modes
+- [Phase 02-ai-content-pipeline]: Q&A tab in roadmap detail renders placeholder per plan spec — Plan 07 replaces with full RAG Q&A interface
 
 ### Pending Todos
 
@@ -115,6 +119,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-08T14:22:20.318Z
-Stopped at: Completed 02-ai-content-pipeline 02-03-PLAN.md
+Last session: 2026-04-08T14:27:28.292Z
+Stopped at: Completed 02-ai-content-pipeline 02-05-PLAN.md
 Resume file: None
