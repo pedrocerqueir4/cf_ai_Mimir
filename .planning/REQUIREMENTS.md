@@ -52,7 +52,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Learning UX
 
 - [x] **UX-01**: User can see a visual roadmap of their learning path with progress indicators
-- [ ] **UX-02**: User receives immediate feedback on quiz answers (correct/wrong with explanation)
+- [x] **UX-02**: User receives immediate feedback on quiz answers (correct/wrong with explanation)
 - [x] **UX-03**: UI is mobile-first with thumb-zone navigation and minimum 48px tap targets
 - [x] **UX-04**: User can resume learning exactly where they left off across sessions
 
@@ -136,7 +136,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QNA-03 | Phase 2 | Complete |
 | QNA-04 | Phase 2 | Complete |
 | UX-01 | Phase 2 | Complete |
-| UX-02 | Phase 2 | Pending |
+| UX-02 | Phase 2 | Complete |
 | GAME-01 | Phase 3 | Pending |
 | GAME-02 | Phase 3 | Pending |
 | GAME-03 | Phase 3 | Pending |
