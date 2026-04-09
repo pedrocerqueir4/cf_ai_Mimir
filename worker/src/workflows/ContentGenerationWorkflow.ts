@@ -1,6 +1,6 @@
 import { WorkflowEntrypoint, WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
-import { eq } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import * as schema from "../db/schema";
 import {
   RoadmapOutputSchema,
@@ -72,21 +72,36 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
           const parsed = JSON.parse(rawText);
           const validated = RoadmapOutputSchema.parse(parsed);
 
-          const id = crypto.randomUUID();
-          const now = new Date();
+          // Find the roadmap row pre-created by the chat route (keyed by userId + topic + generating)
+          const existingRows = await db
+            .select()
+            .from(schema.roadmaps)
+            .where(
+              and(
+                eq(schema.roadmaps.userId, userId),
+                eq(schema.roadmaps.topic, topic),
+                eq(schema.roadmaps.status, "generating"),
+              ),
+            )
+            .orderBy(desc(schema.roadmaps.createdAt))
+            .limit(1);
 
-          await db.insert(schema.roadmaps).values({
-            id,
-            userId,
-            title: validated.title,
-            topic,
-            complexity: validated.complexity,
-            status: "generating",
-            workflowRunId: conversationId,
-            nodesJson: JSON.stringify(validated.nodes),
-            createdAt: now,
-            updatedAt: now,
-          });
+          if (existingRows.length === 0) {
+            throw new Error(`No pre-created roadmap found for userId=${userId} topic=${topic}`);
+          }
+
+          const id = existingRows[0].id;
+
+          // UPDATE the existing row with AI-generated content
+          await db
+            .update(schema.roadmaps)
+            .set({
+              title: validated.title,
+              complexity: validated.complexity,
+              nodesJson: JSON.stringify(validated.nodes),
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.roadmaps.id, id));
 
           // Return ONLY the ID — never return full content from step.do()
           return id;
