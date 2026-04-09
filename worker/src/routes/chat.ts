@@ -56,24 +56,11 @@ chatRoutes.post("/message", sanitize, async (c) => {
     const topic = extractTopicFromMessage(trimmedMessage);
 
     // Trigger Cloudflare Workflow asynchronously
+    // Pass a known ID so the Workflow can store it as workflowRunId in D1
+    const workflowId = crypto.randomUUID();
     const instance = await c.env.CONTENT_WORKFLOW.create({
-      params: { topic, userId, conversationId },
-    });
-
-    // Create roadmap row NOW with server-generated instance.id
-    // Workflow will UPDATE this row (not INSERT) — keeps workflowRunId secure
-    const roadmapId = crypto.randomUUID();
-    await db.insert(schema.roadmaps).values({
-      id: roadmapId,
-      userId,
-      title: topic,
-      topic,
-      complexity: "linear",
-      status: "generating",
-      workflowRunId: instance.id,
-      nodesJson: "[]",
-      createdAt: now,
-      updatedAt: now,
+      id: workflowId,
+      params: { topic, userId, conversationId, workflowRunId: workflowId },
     });
 
     // Persist assistant acknowledgment message

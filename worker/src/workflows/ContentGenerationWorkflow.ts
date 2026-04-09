@@ -1,6 +1,6 @@
 import { WorkflowEntrypoint, WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
-import { eq, and, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import {
   RoadmapOutputSchema,
@@ -23,13 +23,14 @@ type ContentPayload = {
   topic: string;
   userId: string;
   conversationId: string;
+  workflowRunId: string;
 };
 
 // ─── Workflow ─────────────────────────────────────────────────────────────────
 
 export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPayload> {
   async run(event: WorkflowEvent<ContentPayload>, step: WorkflowStep) {
-    const { topic, userId, conversationId } = event.payload;
+    const { topic, userId, conversationId, workflowRunId } = event.payload;
     let roadmapId: string | null = null;
 
     try {
@@ -72,36 +73,21 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
           const parsed = JSON.parse(rawText);
           const validated = RoadmapOutputSchema.parse(parsed);
 
-          // Find the roadmap row pre-created by the chat route (keyed by userId + topic + generating)
-          const existingRows = await db
-            .select()
-            .from(schema.roadmaps)
-            .where(
-              and(
-                eq(schema.roadmaps.userId, userId),
-                eq(schema.roadmaps.topic, topic),
-                eq(schema.roadmaps.status, "generating"),
-              ),
-            )
-            .orderBy(desc(schema.roadmaps.createdAt))
-            .limit(1);
+          const id = crypto.randomUUID();
+          const now = new Date();
 
-          if (existingRows.length === 0) {
-            throw new Error(`No pre-created roadmap found for userId=${userId} topic=${topic}`);
-          }
-
-          const id = existingRows[0].id;
-
-          // UPDATE the existing row with AI-generated content
-          await db
-            .update(schema.roadmaps)
-            .set({
-              title: validated.title,
-              complexity: validated.complexity,
-              nodesJson: JSON.stringify(validated.nodes),
-              updatedAt: new Date(),
-            })
-            .where(eq(schema.roadmaps.id, id));
+          await db.insert(schema.roadmaps).values({
+            id,
+            userId,
+            title: validated.title,
+            topic,
+            complexity: validated.complexity,
+            status: "generating",
+            workflowRunId,
+            nodesJson: JSON.stringify(validated.nodes),
+            createdAt: now,
+            updatedAt: now,
+          });
 
           // Return ONLY the ID — never return full content from step.do()
           return id;
