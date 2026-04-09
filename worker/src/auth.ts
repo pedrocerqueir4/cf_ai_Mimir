@@ -1,11 +1,14 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { multiSession } from "better-auth/plugins";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "./db/schema";
 
 export function createAuth(env: Env) {
+  const db = drizzle(env.DB, { schema });
   return betterAuth({
     baseURL: env.PUBLIC_URL,
-    database: drizzleAdapter(env.DB, { provider: "sqlite", usePlural: true }),
+    database: drizzleAdapter(db, { provider: "sqlite", usePlural: true, schema }),
     trustedOrigins: [env.PUBLIC_URL],
     session: {
       expiresIn: 60 * 60 * 24 * 7, // 7 days per D-02
