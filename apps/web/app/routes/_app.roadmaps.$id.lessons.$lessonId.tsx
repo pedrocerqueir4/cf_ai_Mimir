@@ -116,12 +116,24 @@ export default function LessonPage() {
   async function handleCompleteLesson() {
     if (!roadmapId || !lessonId) return;
     setIsCompleting(true);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     try {
-      await completeLesson(roadmapId, lessonId);
-      // Invalidate roadmap detail so node states refresh
-      await queryClient.invalidateQueries({
-        queryKey: ["roadmap", roadmapId],
-      });
+      const result = await completeLesson(roadmapId, lessonId, tz);
+      if (result.xpEarned > 0) {
+        toast.success(`+${result.xpEarned} XP earned`, {
+          description: `Completed: ${lesson?.title ?? "Lesson"}`,
+        });
+      }
+      if (result.streakBonus > 0) {
+        setTimeout(() => {
+          toast.success(`+${result.streakBonus} XP bonus`, {
+            description: "Streak active — keep it up!",
+          });
+        }, 300);
+      }
+      // Invalidate both roadmap detail (node states) and user stats (dashboard XP/streak)
+      await queryClient.invalidateQueries({ queryKey: ["roadmap", roadmapId] });
+      await queryClient.invalidateQueries({ queryKey: ["user", "stats"] });
       navigate(`/roadmaps/${roadmapId}`);
     } catch {
       toast.error("Something went wrong. Check your connection and try again.");

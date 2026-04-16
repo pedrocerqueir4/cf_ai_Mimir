@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { CheckCircle, XCircle } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Card } from "~/components/ui/card";
 import { submitQuizAnswer } from "~/lib/api-client";
 import type { QuizQuestion as QuizQuestionType, QuizAnswerResult } from "~/lib/api-client";
@@ -26,6 +28,7 @@ type AnswerState =
  */
 export function QuizQuestion({ question, onAnswered }: QuizQuestionProps) {
   const [state, setState] = useState<AnswerState>({ phase: "idle" });
+  const queryClient = useQueryClient();
 
   const isAnswered = state.phase === "answered";
   const isSubmitting = state.phase === "submitting";
@@ -40,6 +43,12 @@ export function QuizQuestion({ question, onAnswered }: QuizQuestionProps) {
       const result = await submitQuizAnswer(question.id, optionId);
       setState({ phase: "answered", selectedOptionId: optionId, result });
       onAnswered(result.correct);
+      if (result.xpEarned > 0) {
+        toast.success(`+${result.xpEarned} XP earned`, {
+          description: "Correct answer",
+        });
+        queryClient.invalidateQueries({ queryKey: ["user", "stats"] });
+      }
     } catch {
       // On error, reset to idle so user can retry
       setState({ phase: "idle" });
