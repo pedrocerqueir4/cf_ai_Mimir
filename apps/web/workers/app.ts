@@ -1,6 +1,8 @@
 import { createRequestHandler } from "react-router";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { authRateLimit, registerRateLimit } from "../../../worker/src/middleware/rate-limit";
+import { sanitize } from "../../../worker/src/middleware/sanitize";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { multiSession } from "better-auth/plugins";
@@ -87,6 +89,8 @@ function createAuth(env: AppEnv, requestUrl: string) {
 // Hono API for /api/* routes
 const api = new Hono<{ Bindings: AppEnv }>();
 api.use("/*", cors());
+api.use("/api/*", sanitize);
+api.use("/api/auth/*", authRateLimit, registerRateLimit);
 
 api.on(["GET", "POST"], "/api/auth/*", (c) => {
   const auth = createAuth(c.env, c.req.url);
