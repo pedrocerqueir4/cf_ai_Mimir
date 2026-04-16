@@ -11,6 +11,7 @@ import * as schema from "../../../worker/src/db/schema";
 import { chatRoutes } from "../../../worker/src/routes/chat";
 import { roadmapRoutes } from "../../../worker/src/routes/roadmaps";
 import { qaRoutes } from "../../../worker/src/routes/qa";
+import { gamificationRoutes } from "../../../worker/src/routes/gamification";
 
 // Re-export Workflow entrypoint so Miniflare can find the named entrypoint
 export { ContentGenerationWorkflow } from "../../../worker/src/workflows/ContentGenerationWorkflow";
@@ -104,6 +105,7 @@ api.get("/api/health", (c) => c.json({ status: "ok" }));
 api.route("/api/chat", chatRoutes);
 api.route("/api/roadmaps", roadmapRoutes);
 api.route("/api/qa", qaRoutes);
+api.route("/api/user", gamificationRoutes);
 
 // React Router for everything else
 const requestHandler = createRequestHandler(
