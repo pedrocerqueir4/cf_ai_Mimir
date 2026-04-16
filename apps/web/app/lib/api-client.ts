@@ -19,11 +19,12 @@ export interface ChatMessage {
 export interface RoadmapListItem {
   id: string;
   title: string;
-  description: string;
+  topic: string;
+  complexity: string;
+  status: string;
   totalLessons: number;
   completedLessons: number;
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface RoadmapNode {
@@ -39,11 +40,14 @@ export interface RoadmapNode {
 
 export interface RoadmapDetail {
   id: string;
+  userId: string;
   title: string;
-  description: string;
-  totalLessons: number;
-  completedLessons: number;
+  topic: string;
+  complexity: string;
+  status: string;
+  workflowRunId: string | null;
   nodes: RoadmapNode[];
+  completedLessonIds: string[];
   createdAt: string;
   updatedAt: string;
 }

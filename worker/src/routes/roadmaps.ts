@@ -2,18 +2,18 @@ import { Hono } from "hono";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, and, count, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
-import { authGuard } from "../middleware/auth-guard";
+import { authGuard, type AuthVariables } from "../middleware/auth-guard";
 import { sanitize } from "../middleware/sanitize";
 import { verifyOwnership } from "../middleware/idor-check";
 
-export const roadmapRoutes = new Hono<{ Bindings: Env }>();
+export const roadmapRoutes = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
 // Apply auth to all roadmap routes
 roadmapRoutes.use("/*", authGuard);
 
 // GET / — List user's roadmaps with progress counts
 roadmapRoutes.get("/", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const db = drizzle(c.env.DB, { schema });
 
   const userRoadmaps = await db
@@ -59,7 +59,7 @@ roadmapRoutes.get("/", async (c) => {
 
 // GET /:id — Get roadmap detail with nodes and completion state
 roadmapRoutes.get("/:id", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const roadmapId = c.req.param("id");
   const db = drizzle(c.env.DB, { schema });
 
@@ -180,7 +180,7 @@ roadmapRoutes.get("/:id", async (c) => {
 
 // GET /:id/lessons/:lessonId — Get lesson content with quiz questions (NO answer keys)
 roadmapRoutes.get("/:id/lessons/:lessonId", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const roadmapId = c.req.param("id");
   const lessonId = c.req.param("lessonId");
   const db = drizzle(c.env.DB, { schema });
@@ -285,7 +285,7 @@ roadmapRoutes.get("/:id/lessons/:lessonId", async (c) => {
 
 // POST /:id/lessons/:lessonId/complete — Mark lesson as complete (idempotent)
 roadmapRoutes.post("/:id/lessons/:lessonId/complete", sanitize, async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const roadmapId = c.req.param("id");
   const lessonId = c.req.param("lessonId");
   const db = drizzle(c.env.DB, { schema });
@@ -346,7 +346,7 @@ roadmapRoutes.post("/:id/lessons/:lessonId/complete", sanitize, async (c) => {
 
 // POST /quiz/:questionId/answer — Submit quiz answer (ONLY place correctOptionId is revealed)
 roadmapRoutes.post("/quiz/:questionId/answer", sanitize, async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const questionId = c.req.param("questionId");
   const db = drizzle(c.env.DB, { schema });
 
@@ -400,7 +400,7 @@ roadmapRoutes.post("/quiz/:questionId/answer", sanitize, async (c) => {
 
 // GET /:id/quiz/practice — Get practice quiz questions from completed lessons
 roadmapRoutes.get("/:id/quiz/practice", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const roadmapId = c.req.param("id");
   const db = drizzle(c.env.DB, { schema });
 
