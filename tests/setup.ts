@@ -1,5 +1,4 @@
 import { env } from "cloudflare:workers";
-import { createAuth } from "../worker/src/auth";
 
 // Miniflare D1's exec() only accepts a single SQL statement per call.
 // Each statement uses IF NOT EXISTS so calling setupD1() multiple times is safe.
@@ -121,53 +120,84 @@ export async function setupD1() {
 }
 
 /**
- * Creates a real Better Auth user + session and returns the signed cookie string
- * ready to pass as a `Cookie` header.
+ * Replicates better-call's signCookieValue so we can produce a valid signed
+ * cookie without going through Better Auth's HTTP API.
  *
- * Uses Better Auth's own sign-up/sign-in API so the token is properly signed.
- * The cookie value format is: `better-auth.session_token=<token>.<signature>`
+ * Format: encodeURIComponent("<token>.<base64-hmac-sha256>")
+ * The base64 signature must be exactly 44 chars and end with "=" (standard
+ * base64 with padding) — this is what better-call's getSignedCookie validates.
+ *
+ * Better Auth uses DEFAULT_SECRET ("better-auth-secret-12345678901234567890")
+ * when no BETTER_AUTH_SECRET env var is set, which is the case in miniflare tests.
+ */
+async function signCookieValue(token: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signatureBuffer = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(token),
+  );
+  // Standard base64 (NOT base64url) — better-call uses btoa()
+  const signature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
+  return encodeURIComponent(`${token}.${signature}`);
+}
+
+/**
+ * Creates a test user + session directly in D1, bypassing Better Auth's HTTP
+ * API (which blocks login when requireEmailVerification: true).
+ *
+ * Inserts a pre-verified user and a session row, then produces the signed
+ * cookie that Better Auth's authGuard will accept.
  *
  * @param email - Unique email for this test user (use per-describe unique values)
- * @param password - Password (min 8 chars)
- * @returns Object with `cookie` (full cookie string), `userId`, and `sessionToken`
+ * @returns Object with `cookie` (full cookie string) and `userId`
  */
 export async function createTestSession(
   email: string,
-  password = "TestPass123!",
+  _password = "TestPass123!",
 ): Promise<{ cookie: string; userId: string }> {
-  const auth = createAuth(env as any, "http://localhost/");
+  // Better Auth default secret — used when BETTER_AUTH_SECRET is not set
+  const BETTER_AUTH_SECRET = "better-auth-secret-12345678901234567890";
 
-  // Sign up (idempotent — if user exists sign-in will still work)
-  try {
-    await auth.api.signUpEmail({
-      body: { email, password, name: email.split("@")[0] },
-    });
-  } catch {
-    // User may already exist — proceed to sign in
-  }
+  const userId = crypto.randomUUID();
+  const sessionId = crypto.randomUUID();
+  // Raw session token stored in DB — Better Auth looks up sessions by this value
+  const sessionToken = crypto.randomUUID();
+  const now = Math.floor(Date.now() / 1000);
+  // Session expires 7 days from now (stored as Unix seconds in the integer column)
+  const expiresAt = now + 60 * 60 * 24 * 7;
 
-  const signInRes = await auth.api.signInEmail({
-    body: { email, password },
-    asResponse: true,
-  });
+  // Insert a pre-verified user (email_verified = 1 bypasses requireEmailVerification)
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO users (id, name, email, email_verified, created_at, updated_at)
+     VALUES (?, ?, ?, 1, ?, ?)`,
+  ).bind(userId, email.split("@")[0], email, now, now).run();
 
-  const setCookieHeader = signInRes.headers.get("set-cookie") ?? "";
+  // Fetch the actual userId in case the user already existed (OR IGNORE)
+  const existingUser = await env.DB.prepare(
+    `SELECT id FROM users WHERE email = ?`,
+  ).bind(email).first<{ id: string }>();
 
-  // Extract `better-auth.session_token=<value>` from the set-cookie header
-  const tokenMatch = setCookieHeader.match(/better-auth\.session_token=([^;,\s]+)/);
-  if (!tokenMatch) {
-    throw new Error(`Could not extract session token from set-cookie: ${setCookieHeader}`);
-  }
+  const actualUserId = existingUser?.id ?? userId;
 
-  // Decode the percent-encoded cookie value before sending it in Cookie header
-  const cookieValue = decodeURIComponent(tokenMatch[1]);
-  const cookie = `better-auth.session_token=${cookieValue}`;
+  // Insert a session row — token is the raw value Better Auth looks up in DB
+  const actualSessionId = existingUser ? crypto.randomUUID() : sessionId;
+  await env.DB.prepare(
+    `INSERT INTO sessions (id, expires_at, token, created_at, updated_at, user_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(actualSessionId, expiresAt, sessionToken, now, now, actualUserId).run();
 
-  // Extract userId from the response body
-  const body = await signInRes.json() as { user?: { id: string } };
-  const userId = body?.user?.id ?? "";
+  // Produce the signed cookie value that Better Auth's authGuard accepts
+  const signedValue = await signCookieValue(sessionToken, BETTER_AUTH_SECRET);
+  const cookie = `better-auth.session_token=${signedValue}`;
 
-  return { cookie, userId };
+  return { cookie, userId: actualUserId };
 }
 
 /** Creates a mock AI binding that returns canned JSON responses */
