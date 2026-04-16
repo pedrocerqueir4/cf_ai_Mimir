@@ -2,10 +2,8 @@ import { useParams } from "react-router";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Skeleton } from "~/components/ui/skeleton";
 import { RoadmapNodeTree } from "~/components/roadmap/RoadmapNodeTree";
-import { QAThread } from "~/components/qa/QAThread";
 import { fetchRoadmapDetail } from "~/lib/api-client";
 
 export default function RoadmapDetailPage() {
@@ -88,36 +86,15 @@ export default function RoadmapDetailPage() {
         <h1 className="text-xl font-semibold leading-tight">{roadmap.title}</h1>
       </div>
 
-      {/* Tabs: Lessons | Q&A */}
-      <Tabs defaultValue="lessons">
-        <TabsList className="w-full mx-0 px-4 justify-start">
-          <TabsTrigger value="lessons" className="flex-1">
-            Lessons
-          </TabsTrigger>
-          <TabsTrigger value="qna" className="flex-1">
-            Q&A
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Lessons Tab — node tree visualization */}
-        <TabsContent value="lessons" className="mt-4">
-          <RoadmapNodeTree
-            nodes={roadmap.nodes}
-            completedLessonIds={completedLessonIds}
-            roadmapId={roadmap.id}
-            complexity={complexity}
-          />
-        </TabsContent>
-
-        {/* Q&A Tab — roadmap-scoped RAG Q&A (QNA-02, D-14) */}
-        <TabsContent value="qna" className="mt-0 h-[calc(100vh-12rem)]">
-          <QAThread
-            roadmapId={roadmap.id}
-            placeholder="Ask about this roadmap..."
-            emptyText={`Ask anything about your ${roadmap.title} content.`}
-          />
-        </TabsContent>
-      </Tabs>
+      {/* Node tree — lessons visualization */}
+      <div className="mt-4">
+        <RoadmapNodeTree
+          nodes={roadmap.nodes}
+          completedLessonIds={completedLessonIds}
+          roadmapId={roadmap.id}
+          complexity={complexity}
+        />
+      </div>
     </div>
   );
 }
