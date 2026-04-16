@@ -97,6 +97,17 @@ const CREATE_STATEMENTS = [
     explanation TEXT NOT NULL,
     "order" INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS user_stats (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    xp INTEGER NOT NULL DEFAULT 0,
+    lessons_completed INTEGER NOT NULL DEFAULT 0,
+    questions_correct INTEGER NOT NULL DEFAULT 0,
+    current_streak INTEGER NOT NULL DEFAULT 0,
+    longest_streak INTEGER NOT NULL DEFAULT 0,
+    last_streak_date TEXT,
+    last_active_roadmap_id TEXT REFERENCES roadmaps(id) ON DELETE SET NULL,
+    updated_at INTEGER NOT NULL
+  )`,
 ];
 
 // Apply D1 migrations before tests run.
