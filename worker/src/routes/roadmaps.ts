@@ -261,6 +261,15 @@ roadmapRoutes.get("/:id/lessons/:lessonId", async (c) => {
     )
     .limit(1);
 
+  // Map quiz questions to frontend-expected shape
+  const mappedQuestions = quizQuestions.map((q) => ({
+    id: q.id,
+    type: q.questionType === "true_false" ? "true_false" : "mcq",
+    question: q.questionText,
+    options: JSON.parse(q.optionsJson) as Array<{ id: string; text: string }>,
+    order: q.order,
+  }));
+
   return c.json({
     id: lesson.id,
     roadmapId: lesson.roadmapId,
@@ -270,10 +279,7 @@ roadmapRoutes.get("/:id/lessons/:lessonId", async (c) => {
     order: lesson.order,
     createdAt: lesson.createdAt,
     isCompleted: completionCheck.length > 0,
-    quiz: {
-      id: quiz[0]?.id ?? null,
-      questions: quizQuestions,
-    },
+    questions: mappedQuestions,
   });
 });
 
@@ -437,5 +443,14 @@ roadmapRoutes.get("/:id/quiz/practice", async (c) => {
   // Randomize and limit to 10 questions
   const shuffled = questions.sort(() => Math.random() - 0.5).slice(0, 10);
 
-  return c.json({ questions: shuffled });
+  // Map to frontend-expected shape and return bare array
+  const mappedShuffled = shuffled.map((q) => ({
+    id: q.id,
+    type: q.questionType === "true_false" ? "true_false" : "mcq",
+    question: q.questionText,
+    options: JSON.parse(q.optionsJson) as Array<{ id: string; text: string }>,
+    order: q.order,
+  }));
+
+  return c.json(mappedShuffled);
 });
