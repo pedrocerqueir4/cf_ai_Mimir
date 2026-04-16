@@ -58,6 +58,20 @@ export const quizQuestions = sqliteTable("quiz_questions", {
   order: integer("order").notNull(),
 });
 
+// ─── Gamification Tables (Phase 3) ────────────────────────────────────────────
+
+export const userStats = sqliteTable("user_stats", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  xp: integer("xp").notNull().default(0),
+  lessonsCompleted: integer("lessons_completed").notNull().default(0),
+  questionsCorrect: integer("questions_correct").notNull().default(0),
+  currentStreak: integer("current_streak").notNull().default(0),
+  longestStreak: integer("longest_streak").notNull().default(0),
+  lastStreakDate: text("last_streak_date"),
+  lastActiveRoadmapId: text("last_active_roadmap_id").references(() => roadmaps.id, { onDelete: "set null" }),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
 // ─── Auth Tables (Phase 1) ────────────────────────────────────────────────────
 
 export const users = sqliteTable("users", {
