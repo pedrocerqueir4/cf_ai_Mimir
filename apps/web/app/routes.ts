@@ -22,5 +22,6 @@ export default [
     route("roadmaps/:id", "routes/_app.roadmaps.$id.tsx"),
     route("roadmaps/:id/lessons/:lessonId", "routes/_app.roadmaps.$id.lessons.$lessonId.tsx"),
     route("roadmaps/:id/quiz", "routes/_app.roadmaps.$id.quiz.tsx"),
+    route("profile", "routes/_app.profile.tsx"),
   ]),
 ] satisfies RouteConfig;
