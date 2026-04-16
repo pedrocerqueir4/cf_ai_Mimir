@@ -15,7 +15,7 @@
 			"binding": "DB",
 			"database_name": "mimir-db",
 			"database_id": "local",
-			"migrations_dir": "../worker/src/db/migrations"
+			"migrations_dir": "../../worker/src/db/migrations"
 		}
 	],
 	"ai": {
