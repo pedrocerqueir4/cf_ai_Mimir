@@ -28,12 +28,41 @@ type ContentPayload = {
 };
 
 // ─── Model Selection ─────────────────────────────────────────────────────────
-// 70B for roadmap structure (needs quality for proper node organization)
-// 8B for lessons and quizzes (faster, less likely to timeout, sufficient quality)
+// 70B for roadmap structure (json_schema, quality matters for node organization)
+// 8B-fast for lessons (raw Markdown output, no JSON — avoids escaping issues entirely)
+// 8B-fast for quizzes (json_schema supported on -fast variant, short structured output)
+// Note: llama-3.1-8b-instruct-fast IS on the official JSON mode list;
+//       llama-3.1-8b-instruct-fp8 is NOT — that's why json_object was broken.
 const MODEL_ROADMAP = "@cf/meta/llama-3.3-70b-instruct-fp8-fast" as const;
-const MODEL_LESSON = "@cf/meta/llama-3.1-8b-instruct-fp8" as const;
-const MODEL_QUIZ = "@cf/meta/llama-3.1-8b-instruct-fp8" as const;
+const MODEL_LESSON = "@cf/meta/llama-3.1-8b-instruct-fast";  // raw Markdown, no JSON
+const MODEL_QUIZ = "@cf/meta/llama-3.1-8b-instruct-fast";    // json_schema supported
 const MODEL_EMBED = "@cf/baai/bge-large-en-v1.5" as const;
+
+// ─── Lesson Markdown Parser ──────────────────────────────────────────────────
+// Lessons are generated as raw Markdown (no JSON wrapper) to avoid the
+// fundamental problem of LLMs escaping Markdown inside JSON strings.
+// Parse title from first # heading, rest is content.
+
+function parseLessonMarkdown(raw: string): { title: string; content: string } {
+  const text = raw.trim();
+
+  // Try to find first # heading
+  const headingMatch = text.match(/^#\s+(.+)$/m);
+
+  if (headingMatch) {
+    const title = headingMatch[1].trim();
+    // Content is everything after the heading line
+    const headingEnd = text.indexOf(headingMatch[0]) + headingMatch[0].length;
+    const content = text.slice(headingEnd).trim();
+    return { title, content: content || text };
+  }
+
+  // No heading found — use first line as title, rest as content
+  const lines = text.split("\n");
+  const title = lines[0].replace(/^#+\s*/, "").trim() || "Untitled Lesson";
+  const content = lines.slice(1).join("\n").trim() || text;
+  return { title, content };
+}
 
 // ─── AI Response Parser ──────────────────────────────────────────────────────
 // Workers AI returns different shapes depending on model and response_format:
@@ -261,26 +290,40 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
 
               const roadmapTopic = roadmapRows[0]?.topic ?? topic;
 
-              // 8B model doesn't support json_schema — use json_object + schema in prompt
+              // Raw Markdown output — no JSON wrapper.
+              // The 8B model cannot reliably escape Markdown inside JSON strings.
+              // Instead: output raw Markdown starting with # Title, parse it ourselves.
               const lessonSystemPrompt = buildLessonSystemPrompt(
                 roadmapTopic,
                 node.title,
                 node.description ?? "",
-              ) + `\n\nYou MUST respond with a JSON object with exactly these fields:\n- "title": string (the lesson title)\n- "content": string (full lesson in Markdown, 500-2000 words)\n\nExample: {"title": "...", "content": "..."}`;
+              ).replace(
+                "Respond ONLY with valid JSON matching the provided schema. No prose, no markdown fences.",
+                "Start your response with a # heading containing the lesson title, then write the full lesson content in Markdown. Do NOT wrap the output in JSON — write raw Markdown only."
+              );
 
-              const aiResponse = await this.env.AI.run(
+              const aiResponse = await (this.env.AI.run as any)(
                 MODEL_LESSON,
                 {
                   messages: [
                     { role: "system", content: lessonSystemPrompt },
                     { role: "user", content: `Write the lesson for: ${node.title}` },
                   ],
-                  response_format: { type: "json_object" },
-                } as any,
+                },
               );
 
-              const parsed = parseAIResponse(aiResponse);
-              const validated = LessonOutputSchema.parse(parsed);
+              // Extract raw text from AI response
+              const rawMarkdown =
+                typeof aiResponse === "string"
+                  ? aiResponse
+                  : typeof (aiResponse as any)?.response === "string"
+                    ? (aiResponse as any).response
+                    : JSON.stringify(aiResponse);
+
+              console.log(`[Workflow] Step 2b: raw Markdown length=${rawMarkdown.length}`);
+
+              const { title, content } = parseLessonMarkdown(rawMarkdown);
+              const validated = LessonOutputSchema.parse({ title, content });
 
               await db
                 .insert(schema.lessons)
@@ -340,18 +383,20 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
 
               const lesson = lessonRows[0];
 
-              // 8B model doesn't support json_schema — use json_object + schema in prompt
-              const quizSystemPrompt = buildQuizSystemPrompt(lesson.content) + `\n\nYou MUST respond with a JSON object with exactly this structure:\n{"questions": [{"questionText": "...", "questionType": "mcq" or "true_false", "options": [{"id": "opt-a", "text": "..."}], "correctOptionId": "opt-a", "explanation": "..."}]}\n\nProvide 2-5 questions. For MCQ: 4 options. For true_false: 2 options with ids "opt-true" and "opt-false".`;
-
-              const aiResponse = await this.env.AI.run(
+              // 8B-fast variant supports json_schema (on official JSON mode list).
+              // Quiz JSON is short/structured — no long Markdown in string values.
+              const aiResponse = await (this.env.AI.run as any)(
                 MODEL_QUIZ,
                 {
                   messages: [
-                    { role: "system", content: quizSystemPrompt },
+                    { role: "system", content: buildQuizSystemPrompt(lesson.content) },
                     { role: "user", content: "Generate comprehension quiz questions for this lesson." },
                   ],
-                  response_format: { type: "json_object" },
-                } as any,
+                  response_format: {
+                    type: "json_schema",
+                    json_schema: QUIZ_JSON_SCHEMA,
+                  },
+                },
               );
 
               const parsed = parseAIResponse(aiResponse);
