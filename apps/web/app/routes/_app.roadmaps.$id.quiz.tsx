@@ -132,6 +132,7 @@ export default function PracticeQuizPage() {
   }
 
   function handleRetry() {
+    if (!questions) return;
     // Re-shuffle and reset all state
     const indices = questions.map((_, i) => i);
     for (let i = indices.length - 1; i > 0; i--) {

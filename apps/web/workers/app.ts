@@ -57,9 +57,6 @@ function createAuth(env: AppEnv, requestUrl: string) {
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false, // Disable for dev — no email provider yet
-      sendVerificationEmail: async ({ url, user }) => {
-        console.log(`[DEV] Verify email for ${user.email}: ${url}`);
-      },
       sendResetPassword: async ({ url, user }) => {
         console.log(`[DEV] Password reset for ${user.email}: ${url}`);
       },
@@ -83,9 +80,6 @@ function createAuth(env: AppEnv, requestUrl: string) {
         : {}),
     },
     plugins: [multiSession({ maximumSessions: 3 })],
-    advanced: {
-      defaultCallbackURL: "/auth/sign-in",
-    },
   });
 }
 
