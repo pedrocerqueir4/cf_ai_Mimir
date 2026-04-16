@@ -38,16 +38,16 @@ created: 2026-04-16
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 03-00-01 | 00 | 0 | GAME-01..06 | — | Test stubs created (RED state) | setup | `test -f tests/xp.test.ts && test -f tests/gamification.test.ts` | Wave 0 creates | pending |
-| 03-01-01 | 01 | 1 | GAME-01 | — | XP awarded server-side only | unit | `cd worker && npx vitest run tests/xp.test.ts --reporter=verbose` | tests/xp.test.ts | pending |
-| 03-01-02 | 01 | 1 | GAME-03 | — | Level thresholds computed server-side | unit | `cd worker && npx vitest run tests/xp.test.ts --reporter=verbose` | tests/xp.test.ts | pending |
-| 03-01-03 | 01 | 1 | GAME-05 | — | Streak checked server-side on lesson complete | unit | `cd worker && npx vitest run tests/xp.test.ts --reporter=verbose` | tests/xp.test.ts | pending |
-| 03-02-01 | 02 | 1 | GAME-04 | — | UI components export correctly | file-check | `ls apps/web/app/components/gamification/*.tsx` | Wave 1 creates | pending |
-| 03-03-01 | 03 | 2 | GAME-01,02 | T-03-06,07 | XP award + idempotency + atomic upsert | integration | `cd worker && npx vitest run tests/gamification.test.ts --reporter=verbose` | tests/gamification.test.ts | pending |
-| 03-03-02 | 03 | 2 | GAME-04,06 | — | Stats endpoint returns all fields | integration | `cd worker && npx vitest run tests/gamification.test.ts --reporter=verbose` | tests/gamification.test.ts | pending |
-| 03-03-03 | 03 | 2 | GAME-06 | — | Dashboard shows streak from server | e2e | manual | — | pending |
-| 03-04-01 | 04 | 3 | GAME-04 | — | Dashboard renders XP + streak components | file-check | `grep "XPProgressBar" apps/web/app/routes/_app._index.tsx` | Wave 3 creates | pending |
-| 03-04-02 | 04 | 3 | GAME-06 | — | Profile page renders stat cards | file-check | `grep "StatCard" apps/web/app/routes/_app.profile.tsx` | Wave 3 creates | pending |
+| 03-00-01 | 00 | 0 | GAME-01..06 | — | Test stubs created (RED state) | setup | `test -f tests/xp.test.ts && test -f tests/gamification.test.ts` | ✅ | ✅ green |
+| 03-01-01 | 01 | 1 | GAME-01 | — | XP awarded server-side only | unit | `cd worker && npx vitest run tests/xp.test.ts --reporter=verbose` | ✅ | ✅ green |
+| 03-01-02 | 01 | 1 | GAME-03 | — | Level thresholds computed server-side | unit | `cd worker && npx vitest run tests/xp.test.ts --reporter=verbose` | ✅ | ✅ green |
+| 03-01-03 | 01 | 1 | GAME-05 | — | Streak checked server-side on lesson complete | unit | `cd worker && npx vitest run tests/xp.test.ts --reporter=verbose` | ✅ | ✅ green |
+| 03-02-01 | 02 | 1 | GAME-04 | — | UI components export correctly | file-check | `ls apps/web/app/components/gamification/*.tsx` | ✅ | ✅ green |
+| 03-03-01 | 03 | 2 | GAME-01,02 | T-03-06,07 | XP award + idempotency + atomic upsert | integration | `cd worker && npx vitest run tests/gamification.test.ts --reporter=verbose` | ✅ | ✅ green |
+| 03-03-02 | 03 | 2 | GAME-04,06 | — | Stats endpoint returns all fields | integration | `cd worker && npx vitest run tests/gamification.test.ts --reporter=verbose` | ✅ | ✅ green |
+| 03-03-03 | 03 | 2 | GAME-06 | — | Dashboard shows streak from server | e2e | manual | — | ○ manual |
+| 03-04-01 | 04 | 3 | GAME-04 | — | Dashboard renders XP + streak components | file-check | `grep "XPProgressBar" apps/web/app/routes/_app._index.tsx` | ✅ | ✅ green |
+| 03-04-02 | 04 | 3 | GAME-06 | — | Profile page renders stat cards | file-check | `grep "StatCard" apps/web/app/routes/_app.profile.tsx` | ✅ | ✅ green |
 
 *Status: pending · green · red · flaky*
 
@@ -78,8 +78,22 @@ created: 2026-04-16
 - [x] All tasks have `<automated>` verify or Wave 0 dependencies
 - [x] Sampling continuity: no 3 consecutive tasks without automated verify
 - [x] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-04-16
+
+---
+
+## Validation Audit 2026-04-16
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 2 |
+| Resolved | 2 |
+| Escalated | 0 |
+
+Root cause: `createTestSession` in tests/setup.ts failed to extract auth cookie (Better Auth returned 403 for unverified email). Fixed by inserting pre-verified user + HMAC-signed session directly into D1. Also rewrote gamification.test.ts to use `app.request()` with mounted routes instead of `WORKER.fetch()`.
+
+Result: 36/36 tests pass (29 xp.test.ts + 7 gamification.test.ts).
