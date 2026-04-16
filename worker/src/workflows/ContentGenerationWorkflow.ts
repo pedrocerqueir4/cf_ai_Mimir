@@ -203,27 +203,21 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
 
               const roadmapTopic = roadmapRows[0]?.topic ?? topic;
 
+              // 8B model doesn't support json_schema — use json_object + schema in prompt
+              const lessonSystemPrompt = buildLessonSystemPrompt(
+                roadmapTopic,
+                node.title,
+                node.description ?? "",
+              ) + `\n\nYou MUST respond with a JSON object with exactly these fields:\n- "title": string (the lesson title)\n- "content": string (full lesson in Markdown, 500-2000 words)\n\nExample: {"title": "...", "content": "..."}`;
+
               const aiResponse = await this.env.AI.run(
                 MODEL_LESSON,
                 {
                   messages: [
-                    {
-                      role: "system",
-                      content: buildLessonSystemPrompt(
-                        roadmapTopic,
-                        node.title,
-                        node.description ?? "",
-                      ),
-                    },
-                    {
-                      role: "user",
-                      content: `Write the lesson for: ${node.title}`,
-                    },
+                    { role: "system", content: lessonSystemPrompt },
+                    { role: "user", content: `Write the lesson for: ${node.title}` },
                   ],
-                  response_format: {
-                    type: "json_schema",
-                    json_schema: LESSON_JSON_SCHEMA,
-                  },
+                  response_format: { type: "json_object" },
                 } as any,
               );
 
@@ -288,23 +282,17 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
 
               const lesson = lessonRows[0];
 
+              // 8B model doesn't support json_schema — use json_object + schema in prompt
+              const quizSystemPrompt = buildQuizSystemPrompt(lesson.content) + `\n\nYou MUST respond with a JSON object with exactly this structure:\n{"questions": [{"questionText": "...", "questionType": "mcq" or "true_false", "options": [{"id": "opt-a", "text": "..."}], "correctOptionId": "opt-a", "explanation": "..."}]}\n\nProvide 2-5 questions. For MCQ: 4 options. For true_false: 2 options with ids "opt-true" and "opt-false".`;
+
               const aiResponse = await this.env.AI.run(
                 MODEL_QUIZ,
                 {
                   messages: [
-                    {
-                      role: "system",
-                      content: buildQuizSystemPrompt(lesson.content),
-                    },
-                    {
-                      role: "user",
-                      content: "Generate comprehension quiz questions for this lesson.",
-                    },
+                    { role: "system", content: quizSystemPrompt },
+                    { role: "user", content: "Generate comprehension quiz questions for this lesson." },
                   ],
-                  response_format: {
-                    type: "json_schema",
-                    json_schema: QUIZ_JSON_SCHEMA,
-                  },
+                  response_format: { type: "json_object" },
                 } as any,
               );
 
