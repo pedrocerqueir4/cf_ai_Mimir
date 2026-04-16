@@ -14,7 +14,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation** - Project scaffold, auth, database schema, and security contracts
 - [ ] **Phase 2: AI Content Pipeline** - Roadmap generation, lesson delivery, and RAG Q&A
-- [ ] **Phase 3: Gamification** - XP system, levels, daily streaks, and leaderboard
+- [ ] **Phase 2.1: Cross-Phase Integration Fixes** - Rate limiting, Q&A citations, sanitize middleware, type alignment (INSERTED)
+- [ ] **Phase 3: Gamification** - XP system, levels, daily streaks, and stats dashboard
 - [ ] **Phase 4: Multiplayer Battles** - Real-time head-to-head quiz battles with server-authoritative scoring
 
 ## Phase Details
@@ -62,13 +63,29 @@ Plans:
 - [x] 02-06-PLAN.md — Lesson view (Markdown content + inline quiz with instant feedback) + practice quiz mode
 - [x] 02-07-PLAN.md — RAG Q&A: in-lesson bottom sheet + roadmap-level Q&A tab with citation links
 - [ ] 02-08-PLAN.md — Integration verification checkpoint (human end-to-end verification)
-- [ ] 02-09-PLAN.md — Gap closure: fix node locked state for linear roadmaps + remove Q&A tab
-- [ ] 02-10-PLAN.md — Gap closure: fix quiz data pipeline (lesson quiz rendering + practice quiz URL/shape)
+- [x] 02-09-PLAN.md — Gap closure: fix node locked state for linear roadmaps + remove Q&A tab
+- [x] 02-10-PLAN.md — Gap closure: fix quiz data pipeline (lesson quiz rendering + practice quiz URL/shape)
 
 **UI hint**: yes
 
+### Phase 2.1: Cross-Phase Integration Fixes (INSERTED)
+**Goal**: Fix security and data wiring gaps discovered during milestone audit — restore rate limiting on auth endpoints, fix Q&A citation rendering, apply global input sanitization, and align TypeScript types with actual API responses
+**Depends on**: Phase 2
+**Requirements**: QNA-04, SEC-01, SEC-02
+**Gap Closure**: Closes gaps from v1.0-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. Auth endpoints have rate limiting applied (10 req/min sign-in, 5 req/min registration)
+  2. Q&A answers display citation links that navigate to referenced lessons
+  3. Input sanitization middleware runs globally on all API routes
+  4. No TypeScript `as string` casts on userId in roadmap routes
+**Plans**: 2 plans
+
+Plans:
+- [x] 02.1-01-PLAN.md — Security middleware wiring: rate limiting + global sanitize in app.ts
+- [x] 02.1-02-PLAN.md — Data alignment: Q/A citation fix, AuthVariables generic, api-client.ts types
+
 ### Phase 3: Gamification
-**Goal**: Users earn XP and build daily learning habits through a transparent reward loop with levels, streaks, and a leaderboard that makes progress feel real and competitive
+**Goal**: Users earn XP and build daily learning habits through a transparent reward loop with levels, streaks, and a stats dashboard that makes progress feel real and competitive
 **Depends on**: Phase 2
 **Requirements**: GAME-01, GAME-02, GAME-03, GAME-04, GAME-05, GAME-06
 **Success Criteria** (what must be TRUE):
@@ -76,7 +93,14 @@ Plans:
   2. User can see their current XP total, level, and a progress bar showing how much XP remains until the next level-up
   3. User's streak counter increments on the dashboard for each consecutive day they complete at least one lesson, and resets to zero if they miss a day
   4. User can view a leaderboard showing ranked scores for the current period
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Backend foundation: userStats schema, XP/level/streak utility library, stats API endpoint
+- [ ] 03-02-PLAN.md — Gamification UI components (XPProgressBar, StreakCounter, StatCard, LevelBadge) + api-client types
+- [ ] 03-03-PLAN.md — XP award logic in lesson/quiz endpoints, frontend toasts, schema push
+- [ ] 03-04-PLAN.md — Dashboard (home page replacement) + Profile page with stats grid
+
 **UI hint**: yes
 
 ### Phase 4: Multiplayer Battles
@@ -94,11 +118,12 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 1 -> 2 -> 2.1 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/5 | In Progress|  |
-| 2. AI Content Pipeline | 7/11 | In Progress|  |
-| 3. Gamification | 0/TBD | Not started | - |
+| 2. AI Content Pipeline | 10/11 | In Progress|  |
+| 2.1 Integration Fixes | 0/2 | Not started | - |
+| 3. Gamification | 0/4 | Not started | - |
 | 4. Multiplayer Battles | 0/TBD | Not started | - |
