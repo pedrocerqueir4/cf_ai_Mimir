@@ -35,6 +35,8 @@ interface AppEnv {
   AI: Ai;
   VECTORIZE: VectorizeIndex;
   CONTENT_WORKFLOW: Workflow;
+  RATE_LIMITER_AUTH: RateLimit;
+  RATE_LIMITER_REGISTER: RateLimit;
 }
 
 function createAuth(env: AppEnv, requestUrl: string) {
