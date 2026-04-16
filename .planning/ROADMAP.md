@@ -93,9 +93,10 @@ Plans:
   2. User can see their current XP total, level, and a progress bar showing how much XP remains until the next level-up
   3. User's streak counter increments on the dashboard for each consecutive day they complete at least one lesson, and resets to zero if they miss a day
   4. User can view a leaderboard showing ranked scores for the current period
-**Plans**: 4 plans
+**Plans**: 5 plans
 
 Plans:
+- [ ] 03-00-PLAN.md — Wave 0: test stubs for xp.test.ts and gamification.test.ts, setup.ts user_stats table
 - [ ] 03-01-PLAN.md — Backend foundation: userStats schema, XP/level/streak utility library, stats API endpoint
 - [ ] 03-02-PLAN.md — Gamification UI components (XPProgressBar, StreakCounter, StatCard, LevelBadge) + api-client types
 - [ ] 03-03-PLAN.md — XP award logic in lesson/quiz endpoints, frontend toasts, schema push
@@ -125,5 +126,5 @@ Phases execute in numeric order: 1 -> 2 -> 2.1 -> 3 -> 4
 | 1. Foundation | 4/5 | In Progress|  |
 | 2. AI Content Pipeline | 10/11 | In Progress|  |
 | 2.1 Integration Fixes | 0/2 | Not started | - |
-| 3. Gamification | 0/4 | Not started | - |
+| 3. Gamification | 0/5 | Not started | - |
 | 4. Multiplayer Battles | 0/TBD | Not started | - |
