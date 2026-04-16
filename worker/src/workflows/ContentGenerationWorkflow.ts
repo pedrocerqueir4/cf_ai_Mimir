@@ -34,10 +34,11 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
     const { topic, userId, conversationId, workflowRunId } = event.payload;
     let roadmapId: string | null = null;
 
+    console.log(`[Workflow] START topic="${topic}" userId="${userId}" workflowRunId="${workflowRunId}"`);
+
     try {
       // ── Step 1: generate-roadmap ────────────────────────────────────────────
-      // Generates the roadmap structure via Llama 3.3, validates with Zod,
-      // writes to D1, and returns ONLY the roadmapId (1MiB limit compliance).
+      console.log(`[Workflow] Step 1: generate-roadmap — calling AI for topic="${topic}"`);
       roadmapId = await step.do(
         "generate-roadmap",
         {
@@ -50,7 +51,6 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
         async () => {
           const db = drizzle(this.env.DB, { schema });
 
-          // Call Workers AI — NEVER combine response_format with stream: true
           const aiResponse = await this.env.AI.run(
             "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
             {
@@ -65,14 +65,17 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
             } as any,
           );
 
-          // Parse and Zod-validate AI output before D1 write
           const rawText =
             typeof aiResponse === "string"
               ? aiResponse
               : (aiResponse as { response?: string }).response ?? JSON.stringify(aiResponse);
 
+          console.log(`[Workflow] Step 1: AI response length=${rawText.length}`);
+
           const parsed = JSON.parse(rawText);
           const validated = RoadmapOutputSchema.parse(parsed);
+
+          console.log(`[Workflow] Step 1: validated — title="${validated.title}" complexity="${validated.complexity}" nodes=${validated.nodes.length}`);
 
           const id = crypto.randomUUID();
           const now = new Date();
@@ -90,14 +93,13 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
             updatedAt: now,
           });
 
-          // Return ONLY the ID — never return full content from step.do()
+          console.log(`[Workflow] Step 1: DONE — roadmapId="${id}"`);
           return id;
         },
       );
 
       // ── Step 2a: fetch-roadmap-nodes ────────────────────────────────────────
-      // Fetches roadmap from D1 and extracts the node list for lesson generation.
-      // Separated from lesson generation so node data is available for per-lesson steps.
+      console.log(`[Workflow] Step 2a: fetch-roadmap-nodes — roadmapId="${roadmapId}"`);
       const nodes = await step.do(
         "fetch-roadmap-nodes",
         {
@@ -121,23 +123,24 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
           }
 
           const roadmap = roadmapRows[0];
-          return JSON.parse(roadmap.nodesJson) as Array<{
+          const parsed = JSON.parse(roadmap.nodesJson) as Array<{
             id: string;
             title: string;
             description?: string;
             order: number;
             prerequisites: string[];
           }>;
+
+          console.log(`[Workflow] Step 2a: DONE — ${parsed.length} nodes found`);
+          return parsed;
         },
       );
 
       // ── Step 2b: generate-lesson-{nodeId} (per lesson) ─────────────────────
-      // Each lesson is its own step — if lesson 5 of 8 fails, only lesson 5 retries.
-      // Previously all lessons were in one step.do, so a failure on any lesson
-      // would restart ALL lesson generation from scratch.
       const lessonIds: string[] = [];
 
       for (const node of nodes) {
+        console.log(`[Workflow] Step 2b: generate-lesson-${node.id} — "${node.title}" (${lessonIds.length + 1}/${nodes.length})`);
         const lessonId = await step.do(
           `generate-lesson-${node.id}`,
           {
@@ -148,76 +151,84 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
             },
           },
           async () => {
-            const db = drizzle(this.env.DB, { schema });
-            const id = `${roadmapId}-lesson-${node.id}`;
+            try {
+              const db = drizzle(this.env.DB, { schema });
+              const id = `${roadmapId}-lesson-${node.id}`;
 
-            // Fetch roadmap topic (needed for prompt context)
-            const roadmapRows = await db
-              .select({ topic: schema.roadmaps.topic })
-              .from(schema.roadmaps)
-              .where(eq(schema.roadmaps.id, roadmapId!))
-              .limit(1);
+              const roadmapRows = await db
+                .select({ topic: schema.roadmaps.topic })
+                .from(schema.roadmaps)
+                .where(eq(schema.roadmaps.id, roadmapId!))
+                .limit(1);
 
-            const roadmapTopic = roadmapRows[0]?.topic ?? topic;
+              const roadmapTopic = roadmapRows[0]?.topic ?? topic;
 
-            const aiResponse = await this.env.AI.run(
-              "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-              {
-                messages: [
-                  {
-                    role: "system",
-                    content: buildLessonSystemPrompt(
-                      roadmapTopic,
-                      node.title,
-                      node.description ?? "",
-                    ),
+              const aiResponse = await this.env.AI.run(
+                "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+                {
+                  messages: [
+                    {
+                      role: "system",
+                      content: buildLessonSystemPrompt(
+                        roadmapTopic,
+                        node.title,
+                        node.description ?? "",
+                      ),
+                    },
+                    {
+                      role: "user",
+                      content: `Write the lesson for: ${node.title}`,
+                    },
+                  ],
+                  response_format: {
+                    type: "json_schema",
+                    json_schema: LESSON_JSON_SCHEMA,
                   },
-                  {
-                    role: "user",
-                    content: `Write the lesson for: ${node.title}`,
-                  },
-                ],
-                response_format: {
-                  type: "json_schema",
-                  json_schema: LESSON_JSON_SCHEMA,
-                },
-              } as any,
-            );
+                } as any,
+              );
 
-            const rawText =
-              typeof aiResponse === "string"
-                ? aiResponse
-                : (aiResponse as { response?: string }).response ?? JSON.stringify(aiResponse);
+              const rawText =
+                typeof aiResponse === "string"
+                  ? aiResponse
+                  : (aiResponse as { response?: string }).response ?? JSON.stringify(aiResponse);
 
-            const parsed = JSON.parse(rawText);
-            const validated = LessonOutputSchema.parse(parsed);
+              console.log(`[Workflow] Step 2b: lesson "${node.title}" AI response length=${rawText.length}`);
 
-            await db
-              .insert(schema.lessons)
-              .values({
-                id,
-                roadmapId: roadmapId!,
-                nodeId: node.id,
-                title: validated.title,
-                content: validated.content,
-                order: node.order,
-                createdAt: new Date(),
-              })
-              .onConflictDoNothing();
+              const parsed = JSON.parse(rawText);
+              const validated = LessonOutputSchema.parse(parsed);
 
-            // Return ONLY the ID — never return full content from step.do()
-            return id;
+              await db
+                .insert(schema.lessons)
+                .values({
+                  id,
+                  roadmapId: roadmapId!,
+                  nodeId: node.id,
+                  title: validated.title,
+                  content: validated.content,
+                  order: node.order,
+                  createdAt: new Date(),
+                })
+                .onConflictDoNothing();
+
+              console.log(`[Workflow] Step 2b: DONE — lessonId="${id}" title="${validated.title}"`);
+              return id;
+            } catch (err) {
+              console.error(`[Workflow] Step 2b: FAILED lesson "${node.title}" nodeId="${node.id}"`, err);
+              throw err;
+            }
           },
         );
 
         lessonIds.push(lessonId);
       }
 
+      console.log(`[Workflow] All lessons generated: ${lessonIds.length} lessons`);
+
       // ── Step 3: generate-quiz-{lessonId} (per lesson) ──────────────────────
-      // Each lesson's quiz is its own step — if quiz for lesson 8 fails,
-      // only that quiz retries. Previously all quizzes were in one step.do,
-      // so a failure on any quiz would restart ALL quiz generation.
-      for (const lessonId of lessonIds) {
+      for (let idx = 0; idx < lessonIds.length; idx++) {
+        const lessonId = lessonIds[idx];
+        console.log(`[Workflow] Step 3: generate-quiz — lessonId="${lessonId}" (${idx + 1}/${lessonIds.length})`);
+
         await step.do(
           `generate-quiz-${lessonId}`,
           {
@@ -228,83 +239,98 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
             },
           },
           async () => {
-            const db = drizzle(this.env.DB, { schema });
+            try {
+              const db = drizzle(this.env.DB, { schema });
 
-            const lessonRows = await db
-              .select()
-              .from(schema.lessons)
-              .where(eq(schema.lessons.id, lessonId))
-              .limit(1);
+              const lessonRows = await db
+                .select()
+                .from(schema.lessons)
+                .where(eq(schema.lessons.id, lessonId))
+                .limit(1);
 
-            if (lessonRows.length === 0) return;
+              if (lessonRows.length === 0) {
+                console.warn(`[Workflow] Step 3: lesson "${lessonId}" not found in D1, skipping quiz`);
+                return;
+              }
 
-            const lesson = lessonRows[0];
+              const lesson = lessonRows[0];
 
-            const aiResponse = await this.env.AI.run(
-              "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-              {
-                messages: [
-                  {
-                    role: "system",
-                    content: buildQuizSystemPrompt(lesson.content),
+              const aiResponse = await this.env.AI.run(
+                "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+                {
+                  messages: [
+                    {
+                      role: "system",
+                      content: buildQuizSystemPrompt(lesson.content),
+                    },
+                    {
+                      role: "user",
+                      content: "Generate comprehension quiz questions for this lesson.",
+                    },
+                  ],
+                  response_format: {
+                    type: "json_schema",
+                    json_schema: QUIZ_JSON_SCHEMA,
                   },
-                  {
-                    role: "user",
-                    content: "Generate comprehension quiz questions for this lesson.",
-                  },
-                ],
-                response_format: {
-                  type: "json_schema",
-                  json_schema: QUIZ_JSON_SCHEMA,
-                },
-              } as any,
-            );
+                } as any,
+              );
 
-            const rawText =
-              typeof aiResponse === "string"
-                ? aiResponse
-                : (aiResponse as { response?: string }).response ?? JSON.stringify(aiResponse);
+              const rawText =
+                typeof aiResponse === "string"
+                  ? aiResponse
+                  : (aiResponse as { response?: string }).response ?? JSON.stringify(aiResponse);
 
-            const parsed = JSON.parse(rawText);
-            const validated = QuizOutputSchema.parse(parsed);
+              console.log(`[Workflow] Step 3: quiz for "${lesson.title}" AI response length=${rawText.length}`);
 
-            // Deterministic quiz ID — idempotent on retry
-            const quizId = `${lessonId}-quiz`;
+              const parsed = JSON.parse(rawText);
+              const validated = QuizOutputSchema.parse(parsed);
 
-            await db
-              .insert(schema.quizzes)
-              .values({
-                id: quizId,
-                lessonId,
-                createdAt: new Date(),
-              })
-              .onConflictDoNothing();
-
-            for (let i = 0; i < validated.questions.length; i++) {
-              const question = validated.questions[i];
-              const questionId = `${quizId}-q${i}`;
+              const quizId = `${lessonId}-quiz`;
 
               await db
-                .insert(schema.quizQuestions)
+                .insert(schema.quizzes)
                 .values({
-                  id: questionId,
-                  quizId,
-                  questionText: question.questionText,
-                  questionType: question.questionType,
-                  optionsJson: JSON.stringify(question.options),
-                  correctOptionId: question.correctOptionId,
-                  explanation: question.explanation,
-                  order: i,
+                  id: quizId,
+                  lessonId,
+                  createdAt: new Date(),
                 })
                 .onConflictDoNothing();
+
+              for (let i = 0; i < validated.questions.length; i++) {
+                const question = validated.questions[i];
+                const questionId = `${quizId}-q${i}`;
+
+                await db
+                  .insert(schema.quizQuestions)
+                  .values({
+                    id: questionId,
+                    quizId,
+                    questionText: question.questionText,
+                    questionType: question.questionType,
+                    optionsJson: JSON.stringify(question.options),
+                    correctOptionId: question.correctOptionId,
+                    explanation: question.explanation,
+                    order: i,
+                  })
+                  .onConflictDoNothing();
+              }
+
+              console.log(`[Workflow] Step 3: DONE — quizId="${quizId}" questions=${validated.questions.length}`);
+            } catch (err) {
+              console.error(`[Workflow] Step 3: FAILED quiz for lessonId="${lessonId}"`, err);
+              throw err;
             }
           },
         );
       }
 
+      console.log(`[Workflow] All quizzes generated for ${lessonIds.length} lessons`);
+
       // ── Step 4: embed-content-{lessonId} (per lesson) ──────────────────────
-      // Each lesson's embedding is its own step for the same resilience reason.
-      for (const lessonId of lessonIds) {
+      for (let idx = 0; idx < lessonIds.length; idx++) {
+        const lessonId = lessonIds[idx];
+        console.log(`[Workflow] Step 4: embed-content — lessonId="${lessonId}" (${idx + 1}/${lessonIds.length})`);
+
         await step.do(
           `embed-content-${lessonId}`,
           {
@@ -315,67 +341,78 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
             },
           },
           async () => {
-            const db = drizzle(this.env.DB, { schema });
+            try {
+              const db = drizzle(this.env.DB, { schema });
 
-            const lessonRows = await db
-              .select()
-              .from(schema.lessons)
-              .where(eq(schema.lessons.id, lessonId))
-              .limit(1);
+              const lessonRows = await db
+                .select()
+                .from(schema.lessons)
+                .where(eq(schema.lessons.id, lessonId))
+                .limit(1);
 
-            if (lessonRows.length === 0) return;
-
-            const lesson = lessonRows[0];
-
-            // Strip Markdown syntax before chunking for cleaner embeddings
-            const plainText = lesson.content
-              .replace(/#+\s/g, "")
-              .replace(/\*\*(.+?)\*\*/g, "$1")
-              .replace(/\*(.+?)\*/g, "$1")
-              .replace(/`{1,3}[^`]*`{1,3}/g, "")
-              .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-              .replace(/^\s*[-*+]\s/gm, "")
-              .replace(/^\s*\d+\.\s/gm, "")
-              .trim();
-
-            // 300-word chunks, 50-word overlap — safe margin below bge-large 512-token limit
-            const chunks = chunkText(plainText, 300, 50);
-
-            for (let i = 0; i < chunks.length; i++) {
-              const chunk = chunks[i];
-
-              const embeddingResponse = await this.env.AI.run(
-                "@cf/baai/bge-large-en-v1.5",
-                { text: [chunk] } as any,
-              );
-
-              const embedding = embeddingResponse as { data: number[][] };
-
-              if (!embedding.data || embedding.data.length === 0) {
-                throw new Error(`Empty embedding response for lessonId=${lessonId} chunk=${i}`);
+              if (lessonRows.length === 0) {
+                console.warn(`[Workflow] Step 4: lesson "${lessonId}" not found in D1, skipping embed`);
+                return;
               }
 
-              await this.env.VECTORIZE.upsert([
-                {
-                  id: `${lessonId}-chunk-${i}`,
-                  values: embedding.data[0],
-                  metadata: {
-                    lessonId,
-                    roadmapId: roadmapId!,
-                    userId,
-                    chunkIndex: i,
-                    text: chunk,
-                    lessonTitle: lesson.title,
+              const lesson = lessonRows[0];
+
+              const plainText = lesson.content
+                .replace(/#+\s/g, "")
+                .replace(/\*\*(.+?)\*\*/g, "$1")
+                .replace(/\*(.+?)\*/g, "$1")
+                .replace(/`{1,3}[^`]*`{1,3}/g, "")
+                .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+                .replace(/^\s*[-*+]\s/gm, "")
+                .replace(/^\s*\d+\.\s/gm, "")
+                .trim();
+
+              const chunks = chunkText(plainText, 300, 50);
+              console.log(`[Workflow] Step 4: lesson "${lesson.title}" — ${chunks.length} chunks to embed`);
+
+              for (let i = 0; i < chunks.length; i++) {
+                const chunk = chunks[i];
+
+                const embeddingResponse = await this.env.AI.run(
+                  "@cf/baai/bge-large-en-v1.5",
+                  { text: [chunk] } as any,
+                );
+
+                const embedding = embeddingResponse as { data: number[][] };
+
+                if (!embedding.data || embedding.data.length === 0) {
+                  throw new Error(`Empty embedding response for lessonId=${lessonId} chunk=${i}`);
+                }
+
+                await this.env.VECTORIZE.upsert([
+                  {
+                    id: `${lessonId}-chunk-${i}`,
+                    values: embedding.data[0],
+                    metadata: {
+                      lessonId,
+                      roadmapId: roadmapId!,
+                      userId,
+                      chunkIndex: i,
+                      text: chunk,
+                      lessonTitle: lesson.title,
+                    },
                   },
-                },
-              ]);
+                ]);
+              }
+
+              console.log(`[Workflow] Step 4: DONE — lessonId="${lessonId}" embedded ${chunks.length} chunks`);
+            } catch (err) {
+              console.error(`[Workflow] Step 4: FAILED embed for lessonId="${lessonId}"`, err);
+              throw err;
             }
           },
         );
       }
 
+      console.log(`[Workflow] All embeddings complete for ${lessonIds.length} lessons`);
+
       // ── Step 5: mark-complete ──────────────────────────────────────────────
-      // All lessons, quizzes, and embeddings are done — mark roadmap as complete.
+      console.log(`[Workflow] Step 5: mark-complete — roadmapId="${roadmapId}"`);
       await step.do("mark-complete", async () => {
         const db = drizzle(this.env.DB, { schema });
         await db
@@ -383,9 +420,11 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
           .set({ status: "complete", updatedAt: new Date() })
           .where(eq(schema.roadmaps.id, roadmapId!));
       });
+
+      console.log(`[Workflow] COMPLETE — roadmapId="${roadmapId}" topic="${topic}" lessons=${lessonIds.length}`);
     } catch (error) {
-      // On any unhandled error: mark roadmap as failed
-      // Step-level retries (configured above) run first — this catches exhausted retries
+      console.error(`[Workflow] FATAL ERROR — roadmapId="${roadmapId}" topic="${topic}"`, error);
+
       if (roadmapId) {
         try {
           const db = drizzle(this.env.DB, { schema });
@@ -393,8 +432,9 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
             .update(schema.roadmaps)
             .set({ status: "failed", updatedAt: new Date() })
             .where(eq(schema.roadmaps.id, roadmapId));
-        } catch {
-          // Best-effort status update — do not mask the original error
+          console.log(`[Workflow] Marked roadmap "${roadmapId}" as failed`);
+        } catch (statusErr) {
+          console.error(`[Workflow] Failed to mark roadmap as failed`, statusErr);
         }
       }
       throw error;
