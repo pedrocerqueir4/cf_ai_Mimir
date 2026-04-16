@@ -50,7 +50,8 @@ Plans:
   3. User can open a lesson, read bite-sized content scoped to a single concept, and complete comprehension quizzes with immediate correct/wrong feedback and explanation
   4. AI adapts roadmap format to topic complexity — linear sequence for simple topics, branching skill-tree with prerequisites for complex topics
   5. User can ask the AI a question during a lesson or from a standalone Q&A section and receive an answer that cites which lesson or section it came from, scoped to their own content
-**Plans**: 9 plans
+**Plans**: 11 plans
+
 Plans:
 - [x] 02-00-PLAN.md — Wave 0: test stubs for all requirements, AI/Vectorize mock bindings in test setup
 - [x] 02-01-PLAN.md — D1 schema extension (6 tables), Cloudflare bindings (AI/Vectorize/Workflows), Zod validation schemas, shadcn components
@@ -61,6 +62,8 @@ Plans:
 - [x] 02-06-PLAN.md — Lesson view (Markdown content + inline quiz with instant feedback) + practice quiz mode
 - [x] 02-07-PLAN.md — RAG Q&A: in-lesson bottom sheet + roadmap-level Q&A tab with citation links
 - [ ] 02-08-PLAN.md — Integration verification checkpoint (human end-to-end verification)
+- [ ] 02-09-PLAN.md — Gap closure: fix node locked state for linear roadmaps + remove Q&A tab
+- [ ] 02-10-PLAN.md — Gap closure: fix quiz data pipeline (lesson quiz rendering + practice quiz URL/shape)
 
 **UI hint**: yes
 
@@ -96,6 +99,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/5 | In Progress|  |
-| 2. AI Content Pipeline | 7/9 | In Progress|  |
+| 2. AI Content Pipeline | 7/11 | In Progress|  |
 | 3. Gamification | 0/TBD | Not started | - |
 | 4. Multiplayer Battles | 0/TBD | Not started | - |
