@@ -27,6 +27,14 @@ type ContentPayload = {
   workflowRunId: string;
 };
 
+// ─── Model Selection ─────────────────────────────────────────────────────────
+// 70B for roadmap structure (needs quality for proper node organization)
+// 8B for lessons and quizzes (faster, less likely to timeout, sufficient quality)
+const MODEL_ROADMAP = "@cf/meta/llama-3.3-70b-instruct-fp8-fast" as const;
+const MODEL_LESSON = "@cf/meta/llama-3.1-8b-instruct-fp8" as const;
+const MODEL_QUIZ = "@cf/meta/llama-3.1-8b-instruct-fp8" as const;
+const MODEL_EMBED = "@cf/baai/bge-large-en-v1.5" as const;
+
 // ─── AI Response Parser ──────────────────────────────────────────────────────
 // Workers AI returns different shapes depending on model and response_format:
 // - string (raw text)
@@ -91,7 +99,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
           const db = drizzle(this.env.DB, { schema });
 
           const aiResponse = await this.env.AI.run(
-            "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+            MODEL_ROADMAP,
             {
               messages: [
                 { role: "system", content: buildRoadmapSystemPrompt() },
@@ -177,8 +185,8 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
           `generate-lesson-${node.id}`,
           {
             retries: {
-              limit: 2,
-              delay: "10 seconds",
+              limit: 3,
+              delay: "15 seconds",
               backoff: "exponential",
             },
           },
@@ -196,7 +204,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
               const roadmapTopic = roadmapRows[0]?.topic ?? topic;
 
               const aiResponse = await this.env.AI.run(
-                "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+                MODEL_LESSON,
                 {
                   messages: [
                     {
@@ -258,8 +266,8 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
           `generate-quiz-${lessonId}`,
           {
             retries: {
-              limit: 2,
-              delay: "10 seconds",
+              limit: 3,
+              delay: "15 seconds",
               backoff: "exponential",
             },
           },
@@ -281,7 +289,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
               const lesson = lessonRows[0];
 
               const aiResponse = await this.env.AI.run(
-                "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+                MODEL_QUIZ,
                 {
                   messages: [
                     {
@@ -392,7 +400,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                 const chunk = chunks[i];
 
                 const embeddingResponse = await this.env.AI.run(
-                  "@cf/baai/bge-large-en-v1.5",
+                  MODEL_EMBED,
                   { text: [chunk] } as any,
                 );
 
