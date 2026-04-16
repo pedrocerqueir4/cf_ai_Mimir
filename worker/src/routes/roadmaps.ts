@@ -294,8 +294,8 @@ roadmapRoutes.get("/:id/lessons/:lessonId", async (c) => {
 // POST /:id/lessons/:lessonId/complete — Mark lesson as complete (idempotent)
 roadmapRoutes.post("/:id/lessons/:lessonId/complete", sanitize, async (c) => {
   const userId = c.get("userId");
-  const roadmapId = c.req.param("id");
-  const lessonId = c.req.param("lessonId");
+  const roadmapId = c.req.param("id")!;
+  const lessonId = c.req.param("lessonId")!;
   const db = drizzle(c.env.DB, { schema });
 
   // IDOR: verify roadmap ownership
@@ -437,7 +437,7 @@ roadmapRoutes.post("/:id/lessons/:lessonId/complete", sanitize, async (c) => {
 // POST /quiz/:questionId/answer — Submit quiz answer (ONLY place correctOptionId is revealed)
 roadmapRoutes.post("/quiz/:questionId/answer", sanitize, async (c) => {
   const userId = c.get("userId");
-  const questionId = c.req.param("questionId");
+  const questionId = c.req.param("questionId")!;
   const db = drizzle(c.env.DB, { schema });
 
   let body: { selectedOptionId?: string };

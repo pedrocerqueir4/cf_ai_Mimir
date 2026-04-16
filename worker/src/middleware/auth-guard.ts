@@ -6,7 +6,7 @@ export type AuthVariables = {
   session: Record<string, unknown>;
 };
 
-export async function authGuard(c: Context<{ Bindings: Env }>, next: Next) {
+export async function authGuard(c: Context<{ Bindings: Env; Variables: AuthVariables }>, next: Next) {
   const auth = createAuth(c.env);
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session) {

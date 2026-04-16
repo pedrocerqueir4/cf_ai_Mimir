@@ -52,14 +52,11 @@ export function createAuth(env: Env) {
     onAPIError: {
       // D-06: OAuth error handling — log for debugging in dev
       onError: async (error, ctx) => {
-        console.error("[AUTH ERROR]", error.message, error.status);
+        console.error("[AUTH ERROR]", (error as any).message, (error as any).status);
       },
     },
     // D-06: Configure OAuth error redirect — when provider denies permission
     // or returns an error, Better Auth redirects to callbackURL with ?error= param.
     // The sign-in UI (Plan 03) reads this param and shows an Alert.
-    advanced: {
-      defaultCallbackURL: "/auth/sign-in",
-    },
   });
 }

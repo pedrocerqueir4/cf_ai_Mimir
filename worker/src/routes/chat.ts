@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, and, desc } from "drizzle-orm";
 import * as schema from "../db/schema";
-import { authGuard } from "../middleware/auth-guard";
+import { authGuard, type AuthVariables } from "../middleware/auth-guard";
 import { sanitize } from "../middleware/sanitize";
 import {
   detectRoadmapIntent,
@@ -10,14 +10,14 @@ import {
   extractTopicFromMessage,
 } from "../services/content-generation.service";
 
-export const chatRoutes = new Hono<{ Bindings: Env }>();
+export const chatRoutes = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
 // Apply auth to all chat routes
 chatRoutes.use("/*", authGuard);
 
 // POST /message — Send a chat message (SSE stream or workflow trigger)
 chatRoutes.post("/message", sanitize, async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const db = drizzle(c.env.DB, { schema });
 
   let body: { message?: string; conversationId?: string };
@@ -110,7 +110,7 @@ chatRoutes.post("/message", sanitize, async (c) => {
   // NOTE: No response_format here — streaming is incompatible with structured output
   const aiStream = await c.env.AI.run(
     "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-    { messages, stream: true } as Parameters<typeof c.env.AI.run>[1]
+    { messages, stream: true } as any
   );
 
   return new Response(aiStream as unknown as ReadableStream, {
@@ -124,7 +124,7 @@ chatRoutes.post("/message", sanitize, async (c) => {
 
 // GET /conversations — List user's conversations with latest message preview
 chatRoutes.get("/conversations", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const db = drizzle(c.env.DB, { schema });
 
   // Fetch all messages for user, ordered newest first
@@ -162,7 +162,7 @@ chatRoutes.get("/conversations", async (c) => {
 
 // GET /conversations/:conversationId/messages — Get messages for a specific conversation
 chatRoutes.get("/conversations/:conversationId/messages", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const { conversationId } = c.req.param();
   const db = drizzle(c.env.DB, { schema });
 
@@ -198,7 +198,7 @@ chatRoutes.get("/conversations/:conversationId/messages", async (c) => {
 
 // GET /status/:workflowRunId — Poll workflow generation status
 chatRoutes.get("/status/:workflowRunId", async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const { workflowRunId } = c.req.param();
   const db = drizzle(c.env.DB, { schema });
 

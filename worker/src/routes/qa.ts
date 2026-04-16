@@ -2,18 +2,18 @@ import { Hono } from "hono";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, and, inArray } from "drizzle-orm";
 import * as schema from "../db/schema";
-import { authGuard } from "../middleware/auth-guard";
+import { authGuard, type AuthVariables } from "../middleware/auth-guard";
 import { sanitize } from "../middleware/sanitize";
 import { verifyOwnership } from "../middleware/idor-check";
 
-export const qaRoutes = new Hono<{ Bindings: Env }>();
+export const qaRoutes = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
 // Apply auth to all QA routes
 qaRoutes.use("/*", authGuard);
 
 // POST /ask — Ask a question with RAG-backed answer and citation sources
 qaRoutes.post("/ask", sanitize, async (c) => {
-  const userId = c.get("userId") as string;
+  const userId = c.get("userId");
   const db = drizzle(c.env.DB, { schema });
 
   let body: { question?: string; roadmapId?: string; lessonId?: string };
@@ -56,7 +56,7 @@ qaRoutes.post("/ask", sanitize, async (c) => {
   // Step 1: Embed the question using bge-large-en-v1.5 (1024-dimensional)
   const embeddingResult = await c.env.AI.run("@cf/baai/bge-large-en-v1.5", {
     text: [trimmedQuestion],
-  } as Parameters<typeof c.env.AI.run>[1]);
+  } as any);
 
   const embedding = (embeddingResult as { data: number[][] }).data[0];
 
@@ -124,7 +124,7 @@ qaRoutes.post("/ask", sanitize, async (c) => {
         { role: "system", content: systemPrompt },
         { role: "user", content: trimmedQuestion },
       ],
-    } as Parameters<typeof c.env.AI.run>[1]
+    } as any
   );
 
   const answer = (aiResponse as { response?: string }).response ?? "";

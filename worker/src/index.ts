@@ -2,25 +2,13 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { sanitize } from "./middleware/sanitize";
 import { createAuth } from "./auth";
-import { authGuard } from "./middleware/auth-guard";
+import { authGuard, type AuthVariables } from "./middleware/auth-guard";
 import { authRateLimit } from "./middleware/rate-limit";
 import {
   requireTurnstileAfterFailures,
 } from "./middleware/verify-turnstile";
 
-type Env = {
-  DB: D1Database;
-  RATE_LIMITER_AUTH: RateLimit;
-  RATE_LIMITER_REGISTER: RateLimit;
-  PUBLIC_URL: string;
-  GOOGLE_CLIENT_ID: string;
-  GOOGLE_CLIENT_SECRET: string;
-  GITHUB_CLIENT_ID: string;
-  GITHUB_CLIENT_SECRET: string;
-  TURNSTILE_SECRET_KEY: string;
-};
-
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
 app.use("/*", cors());
 app.use("/api/*", sanitize);

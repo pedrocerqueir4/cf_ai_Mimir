@@ -61,7 +61,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                 type: "json_schema",
                 json_schema: ROADMAP_JSON_SCHEMA,
               },
-            } as Parameters<typeof this.env.AI.run>[1],
+            } as any,
           );
 
           // Parse and Zod-validate AI output before D1 write
@@ -156,7 +156,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                   type: "json_schema",
                   json_schema: LESSON_JSON_SCHEMA,
                 },
-              } as Parameters<typeof this.env.AI.run>[1],
+              } as any,
             );
 
             const rawText =
@@ -231,7 +231,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                   type: "json_schema",
                   json_schema: QUIZ_JSON_SCHEMA,
                 },
-              } as Parameters<typeof this.env.AI.run>[1],
+              } as any,
             );
 
             const rawText =
@@ -324,7 +324,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
 
               const embeddingResponse = await this.env.AI.run(
                 "@cf/baai/bge-large-en-v1.5",
-                { text: [chunk] } as Parameters<typeof this.env.AI.run>[1],
+                { text: [chunk] } as any,
               );
 
               const embedding = embeddingResponse as { data: number[][] };
