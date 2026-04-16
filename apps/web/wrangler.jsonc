@@ -21,10 +21,12 @@
 	"ai": {
 		"binding": "AI"
 	},
+	// Vectorize doesn't work locally — use remote binding for dev
 	"vectorize": [
 		{
 			"binding": "VECTORIZE",
-			"index_name": "mimir-lessons"
+			"index_name": "mimir-lessons",
+			"remote": true
 		}
 	],
 	"workflows": [
