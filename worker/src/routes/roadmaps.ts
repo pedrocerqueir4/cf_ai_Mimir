@@ -5,6 +5,14 @@ import * as schema from "../db/schema";
 import { authGuard, type AuthVariables } from "../middleware/auth-guard";
 import { sanitize } from "../middleware/sanitize";
 import { verifyOwnership } from "../middleware/idor-check";
+import {
+  LESSON_XP_LINEAR,
+  LESSON_XP_BRANCHING,
+  QUIZ_XP_PER_CORRECT,
+  STREAK_BONUS_XP,
+  computeLevel,
+  updateStreak,
+} from "../lib/xp";
 
 export const roadmapRoutes = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
@@ -339,9 +347,91 @@ roadmapRoutes.post("/:id/lessons/:lessonId/complete", sanitize, async (c) => {
       lessonId,
       completedAt: new Date(),
     });
+
+    // ─── XP Award (GAME-01, D-01, D-04) ────────────────────────────────────
+    // Determine XP based on roadmap complexity (D-01)
+    const typedRoadmap = roadmap as typeof schema.roadmaps.$inferSelect;
+    const baseXp = typedRoadmap.complexity === "branching" ? LESSON_XP_BRANCHING : LESSON_XP_LINEAR;
+
+    // Read timezone from header (sent by frontend) — D-09
+    const userTimezone = c.req.header("X-User-Timezone") || "UTC";
+    const now = new Date();
+
+    // Read current stats for streak calculation
+    const currentStatsRows = await db
+      .select()
+      .from(schema.userStats)
+      .where(eq(schema.userStats.userId, userId))
+      .limit(1);
+
+    const currentStats = currentStatsRows[0] ?? {
+      xp: 0, currentStreak: 0, longestStreak: 0, lastStreakDate: null,
+    };
+
+    // Calculate streak update (D-08: lesson completion only, D-10: hard reset, D-11: server-side)
+    const streakResult = updateStreak(
+      { currentStreak: currentStats.currentStreak, longestStreak: currentStats.longestStreak, lastStreakDate: currentStats.lastStreakDate },
+      now,
+      userTimezone
+    );
+
+    // Streak bonus: +25 flat XP only when user has built a multi-day streak (D-03).
+    // newStreak >= 2 means the user completed lessons on at least 2 consecutive days.
+    // First-ever lesson (newStreak = 1 from reset branch) does NOT get bonus.
+    const streakBonus = streakResult.newStreak >= 2 ? STREAK_BONUS_XP : 0;
+    const totalXpEarned = baseXp + streakBonus;
+
+    // Atomic upsert — INSERT on first activity, UPDATE on subsequent (Pitfall 2 prevention)
+    await db
+      .insert(schema.userStats)
+      .values({
+        userId,
+        xp: totalXpEarned,
+        lessonsCompleted: 1,
+        questionsCorrect: 0,
+        currentStreak: streakResult.newStreak,
+        longestStreak: streakResult.newLongestStreak,
+        lastStreakDate: streakResult.lastStreakDate,
+        lastActiveRoadmapId: roadmapId,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.userStats.userId,
+        set: {
+          xp: sql`${schema.userStats.xp} + ${totalXpEarned}`,
+          lessonsCompleted: sql`${schema.userStats.lessonsCompleted} + 1`,
+          currentStreak: streakResult.newStreak,
+          longestStreak: streakResult.newLongestStreak,
+          lastStreakDate: streakResult.lastStreakDate,
+          lastActiveRoadmapId: roadmapId,
+          updatedAt: now,
+        },
+      });
+
+    // Compute new total XP and level for response
+    const newXp = currentStats.xp + totalXpEarned;
+    const levelInfo = computeLevel(newXp);
+    const oldLevel = computeLevel(currentStats.xp).level;
+
+    return c.json({
+      completed: true,
+      xpEarned: baseXp,
+      streakBonus,
+      newXp,
+      newLevel: levelInfo.level,
+      levelUp: levelInfo.level > oldLevel,
+    });
   }
 
-  return c.json({ completed: true });
+  // Already completed — return zeros (idempotent, no double XP per Pitfall 3)
+  return c.json({
+    completed: true,
+    xpEarned: 0,
+    streakBonus: 0,
+    newXp: 0,
+    newLevel: 0,
+    levelUp: false,
+  });
 });
 
 // POST /quiz/:questionId/answer — Submit quiz answer (ONLY place correctOptionId is revealed)
@@ -390,11 +480,41 @@ roadmapRoutes.post("/quiz/:questionId/answer", sanitize, async (c) => {
   const question = questionRows[0];
   const correct = selectedOptionId === question.correctOptionId;
 
+  // ─── Quiz XP Award (GAME-02, D-02, D-04) ──────────────────────────────────
+  let xpEarned = 0;
+  if (correct) {
+    xpEarned = QUIZ_XP_PER_CORRECT; // 10 XP per correct answer
+
+    // Atomic upsert — quiz does NOT touch streak fields (D-08, Pitfall 5)
+    await db
+      .insert(schema.userStats)
+      .values({
+        userId,
+        xp: xpEarned,
+        lessonsCompleted: 0,
+        questionsCorrect: 1,
+        currentStreak: 0,
+        longestStreak: 0,
+        lastStreakDate: null,
+        lastActiveRoadmapId: null,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: schema.userStats.userId,
+        set: {
+          xp: sql`${schema.userStats.xp} + ${xpEarned}`,
+          questionsCorrect: sql`${schema.userStats.questionsCorrect} + 1`,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
   // This is the ONLY endpoint that reveals correctOptionId + explanation (D-12, UX-02)
   return c.json({
     correct,
     correctOptionId: question.correctOptionId,
     explanation: question.explanation,
+    xpEarned,
   });
 });
 
