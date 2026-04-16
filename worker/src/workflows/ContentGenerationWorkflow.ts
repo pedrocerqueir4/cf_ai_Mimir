@@ -27,6 +27,45 @@ type ContentPayload = {
   workflowRunId: string;
 };
 
+// ─── AI Response Parser ──────────────────────────────────────────────────────
+// Workers AI returns different shapes depending on model and response_format:
+// - string (raw text)
+// - { response: string } (chat completion)
+// - { response: object } (json_schema mode — already parsed)
+// - object directly (some json_schema modes)
+// This normalizes all cases to a parsed JS object.
+
+function parseAIResponse(aiResponse: unknown): unknown {
+  console.log(`[Workflow] parseAIResponse type=${typeof aiResponse}`,
+    typeof aiResponse === "object" ? JSON.stringify(aiResponse).slice(0, 200) : String(aiResponse).slice(0, 200));
+
+  // Case 1: already a string — parse it
+  if (typeof aiResponse === "string") {
+    return JSON.parse(aiResponse);
+  }
+
+  // Case 2: object with .response field
+  if (aiResponse && typeof aiResponse === "object" && "response" in aiResponse) {
+    const resp = (aiResponse as Record<string, unknown>).response;
+    // .response can be a string (needs parsing) or already an object (json_schema mode)
+    if (typeof resp === "string") {
+      // Strip markdown fences that sometimes wrap JSON responses
+      const cleaned = resp.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+      return JSON.parse(cleaned);
+    }
+    if (typeof resp === "object" && resp !== null) {
+      return resp;
+    }
+  }
+
+  // Case 3: object without .response — might be the parsed JSON directly
+  if (aiResponse && typeof aiResponse === "object") {
+    return aiResponse;
+  }
+
+  throw new Error(`Unexpected AI response type: ${typeof aiResponse}`);
+}
+
 // ─── Workflow ─────────────────────────────────────────────────────────────────
 
 export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPayload> {
@@ -65,14 +104,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
             } as any,
           );
 
-          const rawText =
-            typeof aiResponse === "string"
-              ? aiResponse
-              : (aiResponse as { response?: string }).response ?? JSON.stringify(aiResponse);
-
-          console.log(`[Workflow] Step 1: AI response length=${rawText.length}`);
-
-          const parsed = JSON.parse(rawText);
+          const parsed = parseAIResponse(aiResponse);
           const validated = RoadmapOutputSchema.parse(parsed);
 
           console.log(`[Workflow] Step 1: validated — title="${validated.title}" complexity="${validated.complexity}" nodes=${validated.nodes.length}`);
@@ -187,14 +219,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                 } as any,
               );
 
-              const rawText =
-                typeof aiResponse === "string"
-                  ? aiResponse
-                  : (aiResponse as { response?: string }).response ?? JSON.stringify(aiResponse);
-
-              console.log(`[Workflow] Step 2b: lesson "${node.title}" AI response length=${rawText.length}`);
-
-              const parsed = JSON.parse(rawText);
+              const parsed = parseAIResponse(aiResponse);
               const validated = LessonOutputSchema.parse(parsed);
 
               await db
@@ -275,14 +300,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                 } as any,
               );
 
-              const rawText =
-                typeof aiResponse === "string"
-                  ? aiResponse
-                  : (aiResponse as { response?: string }).response ?? JSON.stringify(aiResponse);
-
-              console.log(`[Workflow] Step 3: quiz for "${lesson.title}" AI response length=${rawText.length}`);
-
-              const parsed = JSON.parse(rawText);
+              const parsed = parseAIResponse(aiResponse);
               const validated = QuizOutputSchema.parse(parsed);
 
               const quizId = `${lessonId}-quiz`;
