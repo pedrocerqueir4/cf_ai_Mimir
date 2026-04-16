@@ -94,22 +94,21 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
         },
       );
 
-      // ── Step 2: generate-lessons ────────────────────────────────────────────
-      // Fetches roadmap from D1, generates per-node lessons, writes to D1.
-      // Uses deterministic lesson IDs for idempotency on retry.
-      const lessonIds = await step.do(
-        "generate-lessons",
+      // ── Step 2a: fetch-roadmap-nodes ────────────────────────────────────────
+      // Fetches roadmap from D1 and extracts the node list for lesson generation.
+      // Separated from lesson generation so node data is available for per-lesson steps.
+      const nodes = await step.do(
+        "fetch-roadmap-nodes",
         {
           retries: {
             limit: 2,
-            delay: "10 seconds",
+            delay: "5 seconds",
             backoff: "exponential",
           },
         },
         async () => {
           const db = drizzle(this.env.DB, { schema });
 
-          // Fetch roadmap from D1 (step 1 already wrote it)
           const roadmapRows = await db
             .select()
             .from(schema.roadmaps)
@@ -121,19 +120,44 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
           }
 
           const roadmap = roadmapRows[0];
-          const nodes = JSON.parse(roadmap.nodesJson) as Array<{
+          return JSON.parse(roadmap.nodesJson) as Array<{
             id: string;
             title: string;
             description?: string;
             order: number;
             prerequisites: string[];
           }>;
+        },
+      );
 
-          const generatedIds: string[] = [];
+      // ── Step 2b: generate-lesson-{nodeId} (per lesson) ─────────────────────
+      // Each lesson is its own step — if lesson 5 of 8 fails, only lesson 5 retries.
+      // Previously all lessons were in one step.do, so a failure on any lesson
+      // would restart ALL lesson generation from scratch.
+      const lessonIds: string[] = [];
 
-          for (const node of nodes) {
-            // Deterministic ID — idempotent on retry
-            const lessonId = `${roadmapId}-lesson-${node.id}`;
+      for (const node of nodes) {
+        const lessonId = await step.do(
+          `generate-lesson-${node.id}`,
+          {
+            retries: {
+              limit: 2,
+              delay: "10 seconds",
+              backoff: "exponential",
+            },
+          },
+          async () => {
+            const db = drizzle(this.env.DB, { schema });
+            const id = `${roadmapId}-lesson-${node.id}`;
+
+            // Fetch roadmap topic (needed for prompt context)
+            const roadmapRows = await db
+              .select({ topic: schema.roadmaps.topic })
+              .from(schema.roadmaps)
+              .where(eq(schema.roadmaps.id, roadmapId!))
+              .limit(1);
+
+            const roadmapTopic = roadmapRows[0]?.topic ?? topic;
 
             const aiResponse = await this.env.AI.run(
               "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
@@ -142,7 +166,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                   {
                     role: "system",
                     content: buildLessonSystemPrompt(
-                      roadmap.topic,
+                      roadmapTopic,
                       node.title,
                       node.description ?? "",
                     ),
@@ -170,7 +194,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
             await db
               .insert(schema.lessons)
               .values({
-                id: lessonId,
+                id,
                 roadmapId: roadmapId!,
                 nodeId: node.id,
                 title: validated.title,
@@ -180,37 +204,38 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
               })
               .onConflictDoNothing();
 
-            generatedIds.push(lessonId);
-          }
-
-          // Return ONLY IDs — never return full content from step.do()
-          return generatedIds;
-        },
-      );
-
-      // ── Step 3: generate-quizzes ────────────────────────────────────────────
-      // For each lesson: fetches content from D1, generates quiz, writes quiz
-      // and quiz_questions rows with deterministic IDs for retry idempotency.
-      await step.do(
-        "generate-quizzes",
-        {
-          retries: {
-            limit: 2,
-            delay: "10 seconds",
-            backoff: "exponential",
+            // Return ONLY the ID — never return full content from step.do()
+            return id;
           },
-        },
-        async () => {
-          const db = drizzle(this.env.DB, { schema });
+        );
 
-          for (const lessonId of lessonIds) {
+        lessonIds.push(lessonId);
+      }
+
+      // ── Step 3: generate-quiz-{lessonId} (per lesson) ──────────────────────
+      // Each lesson's quiz is its own step — if quiz for lesson 8 fails,
+      // only that quiz retries. Previously all quizzes were in one step.do,
+      // so a failure on any quiz would restart ALL quiz generation.
+      for (const lessonId of lessonIds) {
+        await step.do(
+          `generate-quiz-${lessonId}`,
+          {
+            retries: {
+              limit: 2,
+              delay: "10 seconds",
+              backoff: "exponential",
+            },
+          },
+          async () => {
+            const db = drizzle(this.env.DB, { schema });
+
             const lessonRows = await db
               .select()
               .from(schema.lessons)
               .where(eq(schema.lessons.id, lessonId))
               .limit(1);
 
-            if (lessonRows.length === 0) continue;
+            if (lessonRows.length === 0) return;
 
             const lesson = lessonRows[0];
 
@@ -266,42 +291,38 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                   questionText: question.questionText,
                   questionType: question.questionType,
                   optionsJson: JSON.stringify(question.options),
-                  // correctOptionId stored server-side only — NEVER sent to client before submission
                   correctOptionId: question.correctOptionId,
                   explanation: question.explanation,
                   order: i,
                 })
                 .onConflictDoNothing();
             }
-          }
-
-          // Void step — all data written to D1, nothing returned
-        },
-      );
-
-      // ── Step 4: embed-content ───────────────────────────────────────────────
-      // For each lesson: chunks content, generates bge-large embeddings,
-      // upserts to Vectorize, then marks roadmap status as "complete".
-      await step.do(
-        "embed-content",
-        {
-          retries: {
-            limit: 3,
-            delay: "15 seconds",
-            backoff: "exponential",
           },
-        },
-        async () => {
-          const db = drizzle(this.env.DB, { schema });
+        );
+      }
 
-          for (const lessonId of lessonIds) {
+      // ── Step 4: embed-content-{lessonId} (per lesson) ──────────────────────
+      // Each lesson's embedding is its own step for the same resilience reason.
+      for (const lessonId of lessonIds) {
+        await step.do(
+          `embed-content-${lessonId}`,
+          {
+            retries: {
+              limit: 3,
+              delay: "15 seconds",
+              backoff: "exponential",
+            },
+          },
+          async () => {
+            const db = drizzle(this.env.DB, { schema });
+
             const lessonRows = await db
               .select()
               .from(schema.lessons)
               .where(eq(schema.lessons.id, lessonId))
               .limit(1);
 
-            if (lessonRows.length === 0) continue;
+            if (lessonRows.length === 0) return;
 
             const lesson = lessonRows[0];
 
@@ -348,15 +369,19 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                 },
               ]);
             }
-          }
+          },
+        );
+      }
 
-          // Mark roadmap as complete — status transitions: generating → complete
-          await db
-            .update(schema.roadmaps)
-            .set({ status: "complete", updatedAt: new Date() })
-            .where(eq(schema.roadmaps.id, roadmapId!));
-        },
-      );
+      // ── Step 5: mark-complete ──────────────────────────────────────────────
+      // All lessons, quizzes, and embeddings are done — mark roadmap as complete.
+      await step.do("mark-complete", async () => {
+        const db = drizzle(this.env.DB, { schema });
+        await db
+          .update(schema.roadmaps)
+          .set({ status: "complete", updatedAt: new Date() })
+          .where(eq(schema.roadmaps.id, roadmapId!));
+      });
     } catch (error) {
       // On any unhandled error: mark roadmap as failed
       // Step-level retries (configured above) run first — this catches exhausted retries
