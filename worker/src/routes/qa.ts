@@ -92,20 +92,20 @@ qaRoutes.post("/ask", sanitize, async (c) => {
     ),
   ];
 
-  let lessonTitles: Array<{ id: string; title: string }> = [];
+  let lessonData: Array<{ id: string; title: string; order: number }> = [];
   if (citedLessonIds.length > 0) {
-    lessonTitles = await db
-      .select({ id: schema.lessons.id, title: schema.lessons.title })
+    lessonData = await db
+      .select({ id: schema.lessons.id, title: schema.lessons.title, order: schema.lessons.order })
       .from(schema.lessons)
       .where(inArray(schema.lessons.id, citedLessonIds));
   }
 
-  const lessonTitleMap = new Map(lessonTitles.map((l) => [l.id, l.title]));
+  const lessonMap = new Map(lessonData.map((l) => [l.id, { title: l.title, order: l.order }]));
 
   // Step 4: Build context string from matched chunks
   const contextChunks = matches.map((match, index) => {
     const meta = (match.metadata as Record<string, string> | undefined) ?? {};
-    const lessonTitle = lessonTitleMap.get(meta.lessonId ?? "") ?? "Unknown Lesson";
+    const lessonTitle = lessonMap.get(meta.lessonId ?? "")?.title ?? "Unknown Lesson";
     const chunkText = meta.chunkText ?? meta.text ?? "";
     return `[Source ${index + 1}: ${lessonTitle}]\n${chunkText}`;
   });
@@ -130,11 +130,11 @@ qaRoutes.post("/ask", sanitize, async (c) => {
   const answer = (aiResponse as { response?: string }).response ?? "";
 
   // Step 6: Build citation sources for frontend rendering (QNA-04, D-15)
-  const sources = citedLessonIds.map((lId) => ({
+  const citations = citedLessonIds.map((lId) => ({
     lessonId: lId,
-    title: lessonTitleMap.get(lId) ?? "Unknown Lesson",
-    displayText: `Lesson: ${lessonTitleMap.get(lId) ?? "Unknown Lesson"}`,
+    lessonTitle: lessonMap.get(lId)?.title ?? "Unknown Lesson",
+    lessonOrder: lessonMap.get(lId)?.order ?? 0,
   }));
 
-  return c.json({ answer, sources });
+  return c.json({ answer, citations });
 });
