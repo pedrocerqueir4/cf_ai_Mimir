@@ -91,25 +91,90 @@ roadmapRoutes.get("/:id", async (c) => {
 
   const completedLessonIds = completions.map((c) => c.lessonId);
 
-  let nodesJson: unknown;
+  const typedRoadmap = roadmap as typeof schema.roadmaps.$inferSelect;
+
+  let rawNodes: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    order: number;
+    prerequisites: string[];
+  }> = [];
   try {
-    nodesJson = JSON.parse((roadmap as typeof schema.roadmaps.$inferSelect).nodesJson);
+    rawNodes = JSON.parse(typedRoadmap.nodesJson);
   } catch {
-    nodesJson = [];
+    rawNodes = [];
+  }
+
+  // Build a set of completed lesson IDs for O(1) lookup
+  const completedSet = new Set(completedLessonIds);
+
+  // Enrich nodes with state, lessonId, parentId, children
+  const enrichedNodes = rawNodes.map((node) => {
+    // Deterministic lessonId matching ContentGenerationWorkflow
+    const lessonId = `${roadmapId}-lesson-${node.id}`;
+
+    // Compute state
+    let state: "locked" | "available" | "in_progress" | "completed" = "available";
+
+    if (completedSet.has(lessonId)) {
+      state = "completed";
+    } else if (node.prerequisites.length > 0) {
+      // Branching: check all prerequisites are completed
+      const allPrereqsComplete = node.prerequisites.every((prereqId) => {
+        const prereqLessonId = `${roadmapId}-lesson-${prereqId}`;
+        return completedSet.has(prereqLessonId);
+      });
+      state = allPrereqsComplete ? "available" : "locked";
+    } else if (node.order > 0) {
+      // Linear ordering fallback: all preceding nodes must be completed
+      const allPrecedingComplete = rawNodes
+        .filter((n) => n.order < node.order)
+        .every((n) => {
+          const pLessonId = `${roadmapId}-lesson-${n.id}`;
+          return completedSet.has(pLessonId);
+        });
+      state = allPrecedingComplete ? "available" : "locked";
+    }
+    // else: order === 0 and no prereqs -> "available" (first node)
+
+    // Derive parentId from prerequisites (first prerequisite is parent)
+    const parentId = node.prerequisites.length > 0 ? node.prerequisites[0] : null;
+
+    return {
+      id: node.id,
+      lessonId,
+      title: node.title,
+      description: node.description ?? "",
+      order: node.order,
+      parentId,
+      state,
+      children: [] as Array<unknown>,
+    };
+  });
+
+  // Build children arrays for branching roadmaps
+  for (const node of enrichedNodes) {
+    if (node.parentId) {
+      const parent = enrichedNodes.find((n) => n.id === node.parentId);
+      if (parent) {
+        parent.children.push(node);
+      }
+    }
   }
 
   return c.json({
-    id: (roadmap as typeof schema.roadmaps.$inferSelect).id,
-    userId: (roadmap as typeof schema.roadmaps.$inferSelect).userId,
-    title: (roadmap as typeof schema.roadmaps.$inferSelect).title,
-    topic: (roadmap as typeof schema.roadmaps.$inferSelect).topic,
-    complexity: (roadmap as typeof schema.roadmaps.$inferSelect).complexity,
-    status: (roadmap as typeof schema.roadmaps.$inferSelect).status,
-    workflowRunId: (roadmap as typeof schema.roadmaps.$inferSelect).workflowRunId,
-    nodes: nodesJson,
+    id: typedRoadmap.id,
+    userId: typedRoadmap.userId,
+    title: typedRoadmap.title,
+    topic: typedRoadmap.topic,
+    complexity: typedRoadmap.complexity,
+    status: typedRoadmap.status,
+    workflowRunId: typedRoadmap.workflowRunId,
+    nodes: enrichedNodes,
     completedLessonIds,
-    createdAt: (roadmap as typeof schema.roadmaps.$inferSelect).createdAt,
-    updatedAt: (roadmap as typeof schema.roadmaps.$inferSelect).updatedAt,
+    createdAt: typedRoadmap.createdAt,
+    updatedAt: typedRoadmap.updatedAt,
   });
 });
 

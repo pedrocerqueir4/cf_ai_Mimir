@@ -47,12 +47,22 @@ function computeNodeState(
   if (!node.parentId && node.order === 0) return "available";
   if (depth === 0 && node.order === 0) return "available";
 
-  // Check if parent is completed
+  // Check if parent is completed (branching roadmaps)
   if (node.parentId) {
     const parent = allNodes.find((n) => n.id === node.parentId);
     if (!parent) return "available";
     const parentState = computeNodeState(parent, allNodes, completedLessonIds, depth - 1);
     if (parentState !== "completed") return "locked";
+    return "available";
+  }
+
+  // Linear ordering fallback: no parentId but order > 0
+  // All preceding nodes (by order) must be completed
+  if (node.order > 0) {
+    const allPrecedingComplete = allNodes
+      .filter((n) => n.order < node.order)
+      .every((n) => n.lessonId && completedLessonIds.includes(n.lessonId));
+    return allPrecedingComplete ? "available" : "locked";
   }
 
   return "available";
