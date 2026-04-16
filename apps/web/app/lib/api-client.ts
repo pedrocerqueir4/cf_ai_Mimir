@@ -70,6 +70,34 @@ export interface QuizAnswerResult {
   correct: boolean;
   correctOptionId: string;
   explanation: string;
+  xpEarned: number;
+}
+
+// ─── Gamification Types ──────────────────────────────────────────────────────
+
+export interface LessonCompleteResult {
+  completed: boolean;
+  xpEarned: number;
+  streakBonus: number;
+  newXp: number;
+  newLevel: number;
+  levelUp: boolean;
+}
+
+export interface UserStats {
+  xp: number;
+  level: number;
+  xpToNextLevel: number;
+  progressPercent: number;
+  streak: number;
+  longestStreak: number;
+  lastActiveRoadmapId: string | null;
+  todayLessonCompleted: boolean;
+  lessonsCompleted: number;
+  questionsCorrect: number;
+  name: string;
+  email: string;
+  image: string | null;
 }
 
 export interface LessonDetail {
@@ -246,23 +274,31 @@ export async function submitQuizAnswer(
 }
 
 /**
- * Mark a lesson as complete and record XP.
+ * Mark a lesson as complete and record XP. Returns gamification result including
+ * XP earned, streak bonus, new level, and whether a level-up occurred.
  */
 export async function completeLesson(
   roadmapId: string,
-  lessonId: string
-): Promise<void> {
+  lessonId: string,
+  timezone?: string
+): Promise<LessonCompleteResult> {
+  const headers: Record<string, string> = {};
+  if (timezone) headers["X-User-Timezone"] = timezone;
+
   const response = await fetch(
     `/api/roadmaps/${encodeURIComponent(roadmapId)}/lessons/${encodeURIComponent(lessonId)}/complete`,
     {
       method: "POST",
       credentials: "include",
+      headers,
     }
   );
 
   if (!response.ok) {
     throw new Error(`Failed to complete lesson: ${response.status}`);
   }
+
+  return response.json() as Promise<LessonCompleteResult>;
 }
 
 /**
@@ -310,4 +346,21 @@ export async function askQuestion(
   }
 
   return response.json() as Promise<QAResponse>;
+}
+
+// ─── Gamification ────────────────────────────────────────────────────────────
+
+/**
+ * Fetch current user's gamification stats (XP, level, streak, profile info).
+ */
+export async function fetchUserStats(tz: string): Promise<UserStats> {
+  const response = await fetch(`/api/user/stats?tz=${encodeURIComponent(tz)}`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch user stats: ${response.status}`);
+  }
+
+  return response.json() as Promise<UserStats>;
 }
