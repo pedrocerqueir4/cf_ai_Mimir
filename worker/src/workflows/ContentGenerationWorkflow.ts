@@ -43,13 +43,73 @@ const MODEL_EMBED = "@cf/baai/bge-large-en-v1.5" as const;
 // - object directly (some json_schema modes)
 // This normalizes all cases to a parsed JS object.
 
+/**
+ * Attempt to repair broken JSON from LLM output.
+ * Common issues: triple-quoted strings ("""), unescaped newlines in values,
+ * unescaped control characters, trailing commas.
+ */
+function repairJson(raw: string): string {
+  let s = raw.trim();
+  // Strip markdown fences
+  s = s.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+
+  // Try parsing as-is first
+  try { JSON.parse(s); return s; } catch { /* needs repair */ }
+
+  // Fix triple-quoted strings: """ -> "
+  s = s.replace(/"""/g, '"');
+
+  // Fix unescaped newlines inside JSON string values.
+  // Strategy: find string boundaries and escape raw newlines within them.
+  // Walk char by char to handle this properly.
+  let result = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (escaped) {
+      result += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      result += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      result += ch;
+      continue;
+    }
+    if (inString && ch === "\n") {
+      result += "\\n";
+      continue;
+    }
+    if (inString && ch === "\r") {
+      result += "\\r";
+      continue;
+    }
+    if (inString && ch === "\t") {
+      result += "\\t";
+      continue;
+    }
+    result += ch;
+  }
+
+  // Fix trailing commas before } or ]
+  result = result.replace(/,\s*([}\]])/g, "$1");
+
+  return result;
+}
+
 function parseAIResponse(aiResponse: unknown): unknown {
   console.log(`[Workflow] parseAIResponse type=${typeof aiResponse}`,
     typeof aiResponse === "object" ? JSON.stringify(aiResponse).slice(0, 200) : String(aiResponse).slice(0, 200));
 
-  // Case 1: already a string — parse it
+  // Case 1: already a string — repair and parse
   if (typeof aiResponse === "string") {
-    return JSON.parse(aiResponse);
+    return JSON.parse(repairJson(aiResponse));
   }
 
   // Case 2: object with .response field
@@ -57,9 +117,7 @@ function parseAIResponse(aiResponse: unknown): unknown {
     const resp = (aiResponse as Record<string, unknown>).response;
     // .response can be a string (needs parsing) or already an object (json_schema mode)
     if (typeof resp === "string") {
-      // Strip markdown fences that sometimes wrap JSON responses
-      const cleaned = resp.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-      return JSON.parse(cleaned);
+      return JSON.parse(repairJson(resp));
     }
     if (typeof resp === "object" && resp !== null) {
       return resp;
