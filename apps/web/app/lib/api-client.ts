@@ -55,10 +55,10 @@ export interface QuizOption {
 
 export interface QuizQuestion {
   id: string;
-  lessonId: string;
   type: "mcq" | "true_false";
   question: string;
   options: QuizOption[];
+  order: number;
   // correctOptionId intentionally omitted — never sent before answer submission
 }
 
@@ -71,10 +71,12 @@ export interface QuizAnswerResult {
 export interface LessonDetail {
   id: string;
   roadmapId: string;
+  nodeId: string;
   title: string;
   content: string;
   order: number;
-  state: "locked" | "available" | "in_progress" | "completed";
+  createdAt: string;
+  isCompleted: boolean;
   questions: QuizQuestion[];
 }
 
@@ -223,13 +225,13 @@ export async function submitQuizAnswer(
   questionId: string,
   selectedOptionId: string
 ): Promise<QuizAnswerResult> {
-  const response = await fetch("/api/quiz/answer", {
+  const response = await fetch(`/api/roadmaps/quiz/${encodeURIComponent(questionId)}/answer`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     credentials: "include",
-    body: JSON.stringify({ questionId, selectedOptionId }),
+    body: JSON.stringify({ selectedOptionId }),
   });
 
   if (!response.ok) {
@@ -266,7 +268,7 @@ export async function fetchPracticeQuiz(
   roadmapId: string
 ): Promise<QuizQuestion[]> {
   const response = await fetch(
-    `/api/roadmaps/${encodeURIComponent(roadmapId)}/quiz`,
+    `/api/roadmaps/${encodeURIComponent(roadmapId)}/quiz/practice`,
     {
       credentials: "include",
     }
