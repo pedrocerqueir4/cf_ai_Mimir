@@ -96,11 +96,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 03-00-PLAN.md — Wave 0: test stubs for xp.test.ts and gamification.test.ts, setup.ts user_stats table
-- [ ] 03-01-PLAN.md — Backend foundation: userStats schema, XP/level/streak utility library, stats API endpoint
-- [ ] 03-02-PLAN.md — Gamification UI components (XPProgressBar, StreakCounter, StatCard, LevelBadge) + api-client types
-- [ ] 03-03-PLAN.md — XP award logic in lesson/quiz endpoints, frontend toasts, schema push
-- [ ] 03-04-PLAN.md — Dashboard (home page replacement) + Profile page with stats grid
+- [x] 03-00-PLAN.md — Wave 0: test stubs for xp.test.ts and gamification.test.ts, setup.ts user_stats table
+- [x] 03-01-PLAN.md — Backend foundation: userStats schema, XP/level/streak utility library, stats API endpoint
+- [x] 03-02-PLAN.md — Gamification UI components (XPProgressBar, StreakCounter, StatCard, LevelBadge) + api-client types
+- [x] 03-03-PLAN.md — XP award logic in lesson/quiz endpoints, frontend toasts, schema push
+- [x] 03-04-PLAN.md — Dashboard (home page replacement) + Profile page with stats grid
 
 **UI hint**: yes
 
