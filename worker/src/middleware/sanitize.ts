@@ -18,6 +18,14 @@ function checkObject(obj: unknown): boolean {
 }
 
 export async function sanitize(c: Context, next: Next) {
+  // Skip body sanitization for Better Auth routes — Better Auth validates its own
+  // inputs, and reading the body here would consume the ReadableStream, causing
+  // "Body has already been used" errors when Better Auth calls getBody() later.
+  const path = new URL(c.req.url).pathname;
+  if (path.startsWith("/api/auth/")) {
+    return next();
+  }
+
   if (["POST", "PUT", "PATCH"].includes(c.req.method)) {
     try {
       const body = await c.req.json();

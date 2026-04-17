@@ -40,13 +40,123 @@ interface AppEnv {
   RATE_LIMITER_REGISTER: RateLimit;
 }
 
-function createAuth(env: AppEnv, requestUrl: string) {
+// ---------------------------------------------------------------------------
+// PBKDF2 password hashing — Workers-compatible replacement for @noble/hashes
+// scrypt.
+//
+// Why: @noble/hashes scryptAsync relies on Date.now() to decide when to yield
+// control back to the event loop (asyncLoop). In Cloudflare Workers, Date.now()
+// is frozen to the request start timestamp for the duration of the request, so
+// the yield never fires. scrypt then runs as a tight synchronous loop across
+// all N=16384 iterations, exceeding the Workers CPU-time budget and causing
+// workerd to close the connection — resulting in "fetch failed" at Miniflare.
+//
+// PBKDF2 via crypto.subtle uses the native runtime implementation (no JS loop)
+// and never exceeds the CPU budget regardless of iteration count.
+//
+// Hash format: "pbkdf2v1:<iterations>:<base64url-salt>:<base64url-hash>"
+// ---------------------------------------------------------------------------
+const PBKDF2_ITERATIONS = 100_000;
+const PBKDF2_HASH = "SHA-256";
+const PBKDF2_KEY_LEN = 32; // bytes
+
+function bufToBase64url(buf: ArrayBuffer | Uint8Array): string {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function base64urlToBuf(str: string): Uint8Array {
+  const padded = str.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(padded);
+  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+}
+
+async function pbkdf2Hash(password: string): Promise<string> {
+  const enc = new TextEncoder();
+  const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+  const derived = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: saltBytes as BufferSource,
+      iterations: PBKDF2_ITERATIONS,
+      hash: PBKDF2_HASH,
+    },
+    keyMaterial,
+    PBKDF2_KEY_LEN * 8
+  );
+  return `pbkdf2v1:${PBKDF2_ITERATIONS}:${bufToBase64url(saltBytes)}:${bufToBase64url(derived)}`;
+}
+
+async function pbkdf2Verify({
+  hash,
+  password,
+}: {
+  hash: string;
+  password: string;
+}): Promise<boolean> {
+  const parts = hash.split(":");
+  if (parts.length !== 4 || parts[0] !== "pbkdf2v1") return false;
+  const iterations = parseInt(parts[1], 10);
+  const saltBytes = base64urlToBuf(parts[2]);
+  const expectedHash = base64urlToBuf(parts[3]);
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+  const derived = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: saltBytes as BufferSource,
+      iterations,
+      hash: PBKDF2_HASH,
+    },
+    keyMaterial,
+    expectedHash.byteLength * 8
+  );
+  // Constant-time comparison
+  const a = new Uint8Array(derived);
+  const b = expectedHash;
+  if (a.byteLength !== b.byteLength) return false;
+  let diff = 0;
+  for (let i = 0; i < a.byteLength; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+// ---------------------------------------------------------------------------
+// Auth instance cache — one betterAuth instance per D1 binding reference.
+// Workers isolates are reused across requests; caching avoids re-running
+// Better Auth's async init (Kysely adapter setup, plugin initialization) on
+// every request, which also prevents the globalThis context from being reset
+// mid-flight on concurrent requests.
+// ---------------------------------------------------------------------------
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const authCache = new WeakMap<D1Database, any>();
+
+function getOrCreateAuth(env: AppEnv, requestUrl: string) {
+  const cached = authCache.get(env.DB);
+  if (cached) return cached;
+
   const db = drizzle(env.DB, { schema });
   const requestOrigin = new URL(requestUrl).origin;
   const baseURL = env.PUBLIC_URL || requestOrigin;
-  // Trust both configured PUBLIC_URL and the actual request origin (handles network IP access in dev)
+  // Trust both configured PUBLIC_URL and the actual request origin
   const origins = new Set([baseURL, requestOrigin]);
-  return betterAuth({
+
+  const auth = betterAuth({
     baseURL: requestOrigin,
     database: drizzleAdapter(db, { provider: "sqlite", usePlural: true, schema }),
     trustedOrigins: [...origins],
@@ -57,6 +167,10 @@ function createAuth(env: AppEnv, requestUrl: string) {
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false, // Disable for dev — no email provider yet
+      password: {
+        hash: pbkdf2Hash,
+        verify: pbkdf2Verify,
+      },
       sendResetPassword: async ({ url, user }) => {
         console.log(`[DEV] Password reset for ${user.email}: ${url}`);
       },
@@ -81,6 +195,9 @@ function createAuth(env: AppEnv, requestUrl: string) {
     },
     plugins: [multiSession({ maximumSessions: 3 })],
   });
+
+  authCache.set(env.DB, auth);
+  return auth;
 }
 
 // Hono API for /api/* routes
@@ -89,9 +206,26 @@ api.use("/*", cors());
 api.use("/api/*", sanitize);
 api.use("/api/auth/*", authRateLimit, registerRateLimit);
 
-api.on(["GET", "POST"], "/api/auth/*", (c) => {
-  const auth = createAuth(c.env, c.req.url);
-  return auth.handler(c.req.raw);
+api.on(["GET", "POST"], "/api/auth/*", async (c) => {
+  const auth = getOrCreateAuth(c.env, c.req.url);
+  try {
+    const authRes = await auth.handler(c.req.raw);
+    // Materialize the body before returning. Better Auth's response body is a
+    // ReadableStream created inside the Workers V8 context. Returning the raw
+    // Response object causes workerd to crash when it tries to serialize 4xx
+    // responses back through Miniflare's dispatchFetch — the connection is
+    // closed before a valid HTTP response is sent (manifests as "fetch failed"
+    // at Miniflare). Reading the body as text and constructing a fresh Response
+    // gives workerd a plain string body it can reliably transmit.
+    const body = await authRes.text();
+    return new Response(body, {
+      status: authRes.status,
+      headers: authRes.headers,
+    });
+  } catch (err) {
+    console.error("[auth] handler error:", String(err));
+    return c.json({ error: "Internal server error" }, 500);
+  }
 });
 
 api.get("/api/health", (c) => c.json({ status: "ok" }));
