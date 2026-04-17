@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { authRateLimit, registerRateLimit } from "../../../worker/src/middleware/rate-limit";
 import { sanitize } from "../../../worker/src/middleware/sanitize";
+import { verifyTurnstileToken } from "../../../worker/src/middleware/verify-turnstile";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { multiSession } from "better-auth/plugins";
@@ -205,6 +206,34 @@ const api = new Hono<{ Bindings: AppEnv }>();
 api.use("/*", cors());
 api.use("/api/*", sanitize);
 api.use("/api/auth/*", authRateLimit, registerRateLimit);
+
+// T-01-06: Turnstile CAPTCHA required on sign-up to mitigate bot registrations.
+// Runs before the Better Auth handler so failed verifications short-circuit
+// without consuming the rate-limit budget on the real auth path.
+api.use("/api/auth/sign-up/email", async (c, next) => {
+  const token = c.req.header("cf-turnstile-response");
+  if (!token) {
+    return c.json(
+      { error: "CAPTCHA required", turnstileRequired: true },
+      403
+    );
+  }
+
+  const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
+  const valid = await verifyTurnstileToken(
+    token,
+    c.env.TURNSTILE_SECRET_KEY,
+    ip
+  );
+  if (!valid) {
+    return c.json(
+      { error: "CAPTCHA verification failed", turnstileRequired: true },
+      403
+    );
+  }
+
+  await next();
+});
 
 api.on(["GET", "POST"], "/api/auth/*", async (c) => {
   const auth = getOrCreateAuth(c.env, c.req.url);

@@ -26,11 +26,13 @@ import {
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Separator } from "~/components/ui/separator";
 import { OAuthButtons } from "~/components/auth/OAuthButtons";
+import { TurnstileWidget } from "~/components/auth/TurnstileWidget";
 
 export default function SignUpPage() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const form = useForm<SignUpInput>({
     resolver: zodResolver(signUpSchema),
@@ -45,21 +47,36 @@ export default function SignUpPage() {
   });
 
   async function onSubmit(values: SignUpInput) {
+    if (!turnstileToken) {
+      setServerError("Please complete the CAPTCHA to continue.");
+      return;
+    }
+
     setIsLoading(true);
     setServerError(null);
 
     try {
-      const result = await signUp.email({
-        name: values.name,
-        email: values.email,
-        password: values.password,
-      });
+      const result = await signUp.email(
+        {
+          name: values.name,
+          email: values.email,
+          password: values.password,
+        },
+        { headers: { "cf-turnstile-response": turnstileToken } }
+      );
 
       if (result.error) {
         const status = result.error.status;
-        if (status === 422 || result.error.message?.includes("already")) {
+        if (status === 403) {
+          setServerError("CAPTCHA verification failed. Please try again.");
+          setTurnstileToken(null);
+        } else if (status === 422 || result.error.message?.includes("already")) {
           setServerError(
             "An account with this email already exists. Sign in instead."
+          );
+        } else if (status === 429) {
+          setServerError(
+            "Too many attempts. Wait a few minutes before trying again."
           );
         } else {
           setServerError(
@@ -184,10 +201,15 @@ export default function SignUpPage() {
               )}
             />
 
+            <TurnstileWidget
+              onSuccess={(token) => setTurnstileToken(token)}
+              onError={() => setTurnstileToken(null)}
+            />
+
             <Button
               type="submit"
               className="min-h-12 w-full"
-              disabled={isLoading}
+              disabled={isLoading || !turnstileToken}
             >
               {isLoading ? (
                 <>
