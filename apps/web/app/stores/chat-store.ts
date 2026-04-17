@@ -1,11 +1,8 @@
 import { create } from "zustand";
-import type { ChatMessage } from "~/lib/api-client";
+import type { ChatMessage, GenerationStatus as GenerationStatusBase } from "~/lib/api-client";
 
-export interface GenerationStatus {
+export interface GenerationStatus extends GenerationStatusBase {
   workflowRunId: string;
-  status: "pending" | "generating" | "complete" | "failed";
-  step?: 1 | 2 | 3;
-  roadmapId?: string;
 }
 
 interface ChatState {

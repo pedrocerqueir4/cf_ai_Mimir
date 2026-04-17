@@ -21,6 +21,15 @@ import { fetchPracticeQuiz, fetchRoadmapDetail } from "~/lib/api-client";
 
 type QuizPhase = "quiz" | "summary";
 
+function shuffleIndices(length: number): number[] {
+  const indices = Array.from({ length }, (_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  return indices;
+}
+
 export default function PracticeQuizPage() {
   const { id: roadmapId } = useParams<{ id: string }>();
 
@@ -61,13 +70,7 @@ export default function PracticeQuizPage() {
 
   // Initialize order on first load
   if (questions && questionOrder.length !== questions.length) {
-    const indices = questions.map((_, i) => i);
-    // Shuffle indices for randomized order
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
-    setQuestionOrder(indices);
+    setQuestionOrder(shuffleIndices(questions.length));
   }
 
   // ─── Loading State ────────────────────────────────────────────────────────────
@@ -133,13 +136,7 @@ export default function PracticeQuizPage() {
 
   function handleRetry() {
     if (!questions) return;
-    // Re-shuffle and reset all state
-    const indices = questions.map((_, i) => i);
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
-    setQuestionOrder(indices);
+    setQuestionOrder(shuffleIndices(questions.length));
     setCurrentIndex(0);
     setAnswers({});
     setPhase("quiz");

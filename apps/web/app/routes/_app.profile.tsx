@@ -5,9 +5,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { Separator } from "~/components/ui/separator";
 import { StatCard } from "~/components/gamification/StatCard";
 import { fetchUserStats } from "~/lib/api-client";
+import { getLocalTimezone } from "~/lib/utils";
 
 export default function ProfilePage() {
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tz = getLocalTimezone();
   const { data: stats, isLoading, isError } = useQuery({
     queryKey: ["user", "stats"],
     queryFn: () => fetchUserStats(tz),

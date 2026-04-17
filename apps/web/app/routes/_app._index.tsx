@@ -6,9 +6,10 @@ import { Card, CardContent } from "~/components/ui/card";
 import { XPProgressBar } from "~/components/gamification/XPProgressBar";
 import { StreakCounter } from "~/components/gamification/StreakCounter";
 import { fetchUserStats } from "~/lib/api-client";
+import { getLocalTimezone } from "~/lib/utils";
 
 export default function HomePage() {
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tz = getLocalTimezone();
   const { data: stats, isLoading } = useQuery({
     queryKey: ["user", "stats"],
     queryFn: () => fetchUserStats(tz),

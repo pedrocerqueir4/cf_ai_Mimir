@@ -10,6 +10,7 @@ import { LessonContent } from "~/components/lesson/LessonContent";
 import { QuizQuestion } from "~/components/lesson/QuizQuestion";
 import { InLessonQASheet } from "~/components/qa/InLessonQASheet";
 import { fetchLesson, completeLesson } from "~/lib/api-client";
+import { getLocalTimezone } from "~/lib/utils";
 
 /**
  * Lesson view page — Screen 4 per UI-SPEC.
@@ -116,7 +117,7 @@ export default function LessonPage() {
   async function handleCompleteLesson() {
     if (!roadmapId || !lessonId) return;
     setIsCompleting(true);
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const tz = getLocalTimezone();
     try {
       const result = await completeLesson(roadmapId, lessonId, tz);
       if (result.xpEarned > 0) {
