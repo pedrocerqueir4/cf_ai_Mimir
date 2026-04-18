@@ -418,6 +418,8 @@ export interface BattleLobbyState {
   guestName: string | null;
   guestRoadmapTitle: string | null;
   guestWagerTier: 10 | 15 | 20 | null;
+  /** Server's coin-flip-applied tier once BOTH players have proposed. Null until then. */
+  appliedWagerTier: 10 | 15 | 20 | null;
   questionCount: 5 | 10 | 15;
   winningRoadmapId: string | null;
   winningTopic: string | null;

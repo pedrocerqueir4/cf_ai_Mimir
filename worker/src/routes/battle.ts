@@ -744,6 +744,7 @@ battleRoutes.get("/:id", async (c) => {
       ? (roadmapMap.get(battle.guestRoadmapId) ?? null)
       : null,
     guestWagerTier: battle.guestWagerTier,
+    appliedWagerTier: battle.appliedWagerTier,
     questionCount: battle.questionCount,
     winningRoadmapId: battle.winningRoadmapId,
     winningTopic: battle.winningTopic,

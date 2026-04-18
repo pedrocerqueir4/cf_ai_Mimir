@@ -4,9 +4,29 @@ import { ThemeToggle } from "./ThemeToggle";
 
 interface AppShellProps {
   children: React.ReactNode;
+  /**
+   * When true, hides BottomNav + SidebarNav + headers and removes the
+   * max-width content frame — used for immersive full-viewport routes
+   * (`/battle/pre/*`, `/battle/room/*`) per Phase 4 UI-SPEC §Screens in
+   * Scope "Bottom nav / sidebar nav are hidden on /battle/pre/* and
+   * /battle/room/* to remove exit friction during the signature
+   * animations and the live battle."
+   */
+  immersive?: boolean;
 }
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, immersive = false }: AppShellProps) {
+  if (immersive) {
+    // No nav, no header, no content frame — the route renders its own
+    // full-viewport layout. Keeps the reveal animations and the live
+    // battle free from navigation exit-friction.
+    return (
+      <div className="min-h-screen bg-background">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-background">
       <SidebarNav />
