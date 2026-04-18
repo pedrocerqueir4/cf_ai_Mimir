@@ -33,12 +33,14 @@ import {
   computeBattleScore,
   BATTLE_TIME_LIMIT_MS,
 } from "../lib/battle-scoring";
+import { computeLevel } from "../lib/xp";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const LOBBY_TIMEOUT_MS = 5 * 60 * 1000; // D-04
 const POST_END_GRACE_MS = 30 * 1000; // D-28
 const IDLE_FORFEIT_MISS_COUNT = 3; // D-26
+const DISCONNECT_GRACE_MS = 30 * 1000; // D-25: 30s reconnect grace
 const CLOSE_CODE_MOVED = 4001;
 const CLOSE_CODE_INVALID = 4002;
 
@@ -49,9 +51,19 @@ export type BattlePhase =
   | "pre-battle"
   | "active"
   | "tiebreak"
+  | "opponent-reconnecting" // D-25: one player disconnected, grace window active
   | "ended"
   | "expired"
   | "forfeited";
+
+// Disconnect bucket — stored in ctx.storage under key "disconnect".
+// Captures the state we need to resume a paused battle on reconnect.
+export interface DisconnectRecord {
+  userId: string;
+  disconnectedAtMs: number;
+  pausedQuestionRemainingMs: number;
+  preDisconnectPhase: "active" | "tiebreak";
+}
 
 export interface BattleQuizQuestion {
   id: string;
@@ -162,6 +174,37 @@ export class BattleRoom extends DurableObject<Env> {
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "content-type": "application/json" },
         });
+      case "__testEndBattle": {
+        const p = payload as {
+          winnerId?: string | null;
+          outcome?: "decisive" | "forfeit" | "both-dropped";
+          hostScore?: number;
+          guestScore?: number;
+        };
+        const cfg = await this.ctx.storage.get<BattleConfig>("config");
+        const rt = await this.ctx.storage.get<BattleRuntime>("runtime");
+        if (!cfg || !rt) {
+          return new Response("no config/runtime", { status: 409 });
+        }
+        // Seed runtime scores so endBattle can persist them without
+        // requiring a full simulated battle.
+        if (typeof p.hostScore === "number") {
+          rt.scores[cfg.hostId] = p.hostScore;
+        }
+        if (typeof p.guestScore === "number" && cfg.guestId) {
+          rt.scores[cfg.guestId] = p.guestScore;
+        }
+        rt.phase = "active"; // reset any prior terminal state so endBattle proceeds
+        rt.endBroadcasted = false;
+        await this.ctx.storage.put("runtime", rt);
+        await this.endBattle(
+          p.winnerId ?? null,
+          p.outcome ?? "decisive",
+        );
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
       default:
         return new Response(`Unknown op: ${op}`, { status: 400 });
     }
@@ -177,6 +220,26 @@ export class BattleRoom extends DurableObject<Env> {
     if (!userId) {
       return new Response("Unauthorized", { status: 401 });
     }
+
+    // Plan 08 closes the 04-25 cross-check: when a config is loaded, the
+    // X-Battle-User-Id header MUST match either the host or the guest of
+    // THIS battle. Worker-layer `websocketAuthGuard` already performs the
+    // authoritative check, but this is defense-in-depth against direct DO
+    // fetches that bypass the Worker. Generic 403 matches the Worker
+    // layer's no-enumeration pattern.
+    const existingConfig =
+      await this.ctx.storage.get<BattleConfig>("config");
+    if (existingConfig) {
+      const isParticipant =
+        existingConfig.hostId === userId ||
+        (existingConfig.guestId !== null &&
+          existingConfig.guestId === userId);
+      if (!isParticipant) {
+        return new Response("Forbidden", { status: 403 });
+      }
+    }
+    // If no config exists yet (e.g. upgrade racing opInitLobby), fall
+    // through; the Worker-layer guard already validated the session.
 
     const pair = new WebSocketPair();
     const client = pair[0];
@@ -318,20 +381,96 @@ export class BattleRoom extends DurableObject<Env> {
   // ── Hibernation lifecycle hooks ────────────────────────────────────────
 
   async webSocketClose(
-    _ws: WebSocket,
-    _code: number,
+    ws: WebSocket,
+    code: number,
     _reason: string,
     _wasClean: boolean,
   ): Promise<void> {
-    // TODO(Plan 08): disconnect-grace alarm at now + DISCONNECT_GRACE_MS.
-    // For Wave 2 we intentionally do not forfeit on close; the idle-forfeit
-    // counter (D-26) handles griefing, and Plan 08 will add the 30s grace
-    // timer with opponent-reconnecting broadcast.
+    // D-27: a socket closed with CLOSE_CODE_MOVED was evicted by the
+    // multi-tab guard — the user opened a second tab, so we already have
+    // a live newer socket. Never trigger forfeit in that case.
+    if (code === CLOSE_CODE_MOVED) return;
+
+    let att: SocketAttachment | null;
+    try {
+      att = ws.deserializeAttachment() as SocketAttachment | null;
+    } catch {
+      return;
+    }
+    if (!att?.userId) return;
+
+    const runtime = await this.ctx.storage.get<BattleRuntime>("runtime");
+    const config = await this.ctx.storage.get<BattleConfig>("config");
+    if (!runtime || !config) return;
+
+    // Only start grace on an in-flight battle. Lobby/pre-battle/ended/forfeited
+    // are intentionally NOT guarded — they have their own timeout paths.
+    if (runtime.phase !== "active" && runtime.phase !== "tiebreak") return;
+
+    // D-27 nuance: the user might have another live tab for THIS battle.
+    // ctx.getWebSockets(userId) returns sockets tagged with userId —
+    // if any survive (and aren't THIS closed one), skip the forfeit path.
+    const liveForUser = this.ctx.getWebSockets(att.userId).filter(
+      (s) => s !== ws,
+    );
+    if (liveForUser.length > 0) return;
+
+    // Idempotency: if a disconnect bucket already exists (e.g. both
+    // sockets closed in quick succession), don't overwrite the first.
+    const existingDisconnect =
+      await this.ctx.storage.get<DisconnectRecord>("disconnect");
+    if (existingDisconnect) return;
+
+    const nowMs = Date.now();
+
+    // D-25 timer pause: capture the remaining question time so we can
+    // resume EXACTLY where we left off on reconnect. If no question is
+    // active, remaining = 0 (harmless fallthrough).
+    const pausedQuestionRemainingMs = runtime.questionStartedAtMs
+      ? Math.max(
+          0,
+          runtime.questionStartedAtMs + BATTLE_TIME_LIMIT_MS - nowMs,
+        )
+      : 0;
+
+    const disconnectRecord: DisconnectRecord = {
+      userId: att.userId,
+      disconnectedAtMs: nowMs,
+      pausedQuestionRemainingMs,
+      preDisconnectPhase: runtime.phase,
+    };
+    await this.ctx.storage.put("disconnect", disconnectRecord);
+
+    // Cancel the in-flight question alarm so the timer doesn't fire
+    // during the grace window.
+    try {
+      await this.ctx.storage.deleteAlarm();
+    } catch {
+      /* ignore */
+    }
+
+    // Schedule the 30s grace alarm (D-25). On fire, alarm() detects
+    // phase === "opponent-reconnecting" and triggers endBattle(forfeit).
+    await this.ctx.storage.setAlarm(nowMs + DISCONNECT_GRACE_MS);
+
+    // Flip phase so any late-arriving answer from the opposing socket
+    // won't advance the round while the grace timer is pending.
+    runtime.phase = "opponent-reconnecting";
+    await this.ctx.storage.put("runtime", runtime);
+
+    // Broadcast to everyone still connected (the opposing player). The
+    // disconnected user will receive the snapshot on reconnect via
+    // handleHello.
+    this.broadcast({
+      type: "opponent-reconnecting",
+      graceMs: DISCONNECT_GRACE_MS,
+    });
   }
 
-  async webSocketError(_ws: WebSocket, _error: unknown): Promise<void> {
-    // TODO(Plan 08): same as webSocketClose — surface to opponent via
-    // `opponent-reconnecting` event; alarm fires at 30s for forfeit.
+  async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
+    // Mirror webSocketClose — a socket error without clean close is
+    // treated the same as a disconnect. Delegate to the shared path.
+    await this.webSocketClose(ws, 1006, "socket-error", false);
   }
 
   // ── Alarm dispatch ─────────────────────────────────────────────────────
@@ -339,6 +478,24 @@ export class BattleRoom extends DurableObject<Env> {
   async alarm(): Promise<void> {
     const runtime = await this.ctx.storage.get<BattleRuntime>("runtime");
     if (!runtime) return;
+
+    // D-25: disconnect-grace alarm expiry — forfeit the disconnected user.
+    // Stored in a separate ctx.storage bucket so it can be checked
+    // independently of the question-timer alarm path.
+    if (runtime.phase === "opponent-reconnecting") {
+      const disconnect =
+        await this.ctx.storage.get<DisconnectRecord>("disconnect");
+      const config = await this.ctx.storage.get<BattleConfig>("config");
+      if (disconnect && config) {
+        const winnerId =
+          disconnect.userId === config.hostId
+            ? config.guestId
+            : config.hostId;
+        await this.ctx.storage.delete("disconnect");
+        await this.endBattle(winnerId, "forfeit");
+      }
+      return;
+    }
 
     switch (runtime.phase) {
       case "lobby":
@@ -621,16 +778,185 @@ export class BattleRoom extends DurableObject<Env> {
     const config = await this.ctx.storage.get<BattleConfig>("config");
     if (!runtime || !config) return;
 
+    // Idempotency guard (short-circuit): if we've already broadcast once,
+    // don't double-settle. Defense-in-depth is the ledger-row check below
+    // which handles re-invocation across DO isolates (alarm + normal flow).
     if (runtime.endBroadcasted) return;
+
+    const hostId = config.hostId;
+    const guestId = config.guestId;
+    const hostScore = runtime.scores[hostId] ?? 0;
+    const guestScore = guestId ? (runtime.scores[guestId] ?? 0) : 0;
+    const now = new Date();
+    const nowMs = now.getTime();
+
+    // ── Ledger idempotency check (SEC-05 / T-04-FORFEIT-DOUBLE) ──────
+    // The battle_ledger PK is battleId, so `INSERT OR IGNORE` protects
+    // against duplicate row creation, but the userStats UPDATEs would
+    // still double-apply if we ran them twice. Check for an existing
+    // ledger row BEFORE touching userStats.
+    let alreadySettled = false;
+    try {
+      const existing = await this.env.DB.prepare(
+        "SELECT battle_id FROM battle_ledger WHERE battle_id = ? LIMIT 1",
+      )
+        .bind(config.battleId)
+        .first<{ battle_id: string }>();
+      alreadySettled = !!existing;
+    } catch {
+      // On any DB error, fall through to best-effort settlement. The
+      // SQL batch below will still do INSERT OR IGNORE on its own row,
+      // so the worst case is broadcast without persistence.
+    }
+
+    // ── Resolve wager settlement parameters (D-17, D-19, D-21) ──────
+    // Re-read battles row to get hostWagerAmount / guestWagerAmount (stored
+    // by Plan 04's /start route). These are the authoritative per-user
+    // stake amounts at battle-start; we don't trust runtime memory.
+    let hostWagerAmount = 0;
+    let guestWagerAmount = 0;
+    try {
+      const battleRow = await this.env.DB.prepare(
+        "SELECT host_wager_amount, guest_wager_amount FROM battles WHERE id = ? LIMIT 1",
+      )
+        .bind(config.battleId)
+        .first<{
+          host_wager_amount: number | null;
+          guest_wager_amount: number | null;
+        }>();
+      if (battleRow) {
+        hostWagerAmount = battleRow.host_wager_amount ?? 0;
+        guestWagerAmount = battleRow.guest_wager_amount ?? 0;
+      }
+    } catch {
+      // No battles row (test scenarios) — default to 0 stakes.
+    }
+
+    // D-21: determine loserId and xpTransferred based on outcome.
+    //   decisive  → winner receives opponent's stake, loser loses own stake
+    //   forfeit   → non-forfeiting player wins opponent's stake
+    //   both-dropped → xp_amount = 0, no XP movement (wagers implicitly refunded)
+    let loserId: string | null = null;
+    let xpTransferred = 0;
+    if (outcome !== "both-dropped" && winnerId && guestId) {
+      if (winnerId === hostId) {
+        loserId = guestId;
+        xpTransferred = guestWagerAmount; // winner gets loser's stake
+      } else if (winnerId === guestId) {
+        loserId = hostId;
+        xpTransferred = hostWagerAmount;
+      }
+    }
+
+    // ── Pre-batch: read winner's current XP for level-up detection ──
+    // Needed BEFORE the batch so we can compute old-level accurately.
+    let priorWinnerXp = 0;
+    if (winnerId && xpTransferred > 0 && !alreadySettled) {
+      try {
+        const row = await this.env.DB.prepare(
+          "SELECT xp FROM user_stats WHERE user_id = ? LIMIT 1",
+        )
+          .bind(winnerId)
+          .first<{ xp: number }>();
+        priorWinnerXp = row?.xp ?? 0;
+      } catch {
+        priorWinnerXp = 0;
+      }
+    }
+
+    // ── Atomic batch: update battles row + ledger + userStats XP ─────
+    // env.DB.batch([...]) is a single SQL transaction with automatic
+    // rollback on any statement failure (SEC-05 / T-04-04). Raw
+    // D1PreparedStatements because Drizzle 0.45's db.batch() is less
+    // well-documented for this repo and the raw prepare path maps
+    // directly to the Cloudflare D1 batch semantics.
+    if (!alreadySettled) {
+      const stmts: D1PreparedStatement[] = [];
+
+      // (1) Update battles row status/winner/finalScores
+      stmts.push(
+        this.env.DB.prepare(
+          "UPDATE battles SET status = ?, winner_id = ?, host_final_score = ?, guest_final_score = ?, completed_at = ? WHERE id = ?",
+        ).bind(
+          outcome === "forfeit" ? "forfeited" : "completed",
+          winnerId ?? null,
+          hostScore,
+          guestScore,
+          Math.floor(nowMs / 1000),
+          config.battleId,
+        ),
+      );
+
+      // (2) INSERT OR IGNORE ledger row — PK on battle_id provides the
+      // idempotency key against a raced second call.
+      stmts.push(
+        this.env.DB.prepare(
+          "INSERT OR IGNORE INTO battle_ledger (battle_id, winner_id, loser_id, xp_amount, outcome, settled_at) VALUES (?, ?, ?, ?, ?, ?)",
+        ).bind(
+          config.battleId,
+          winnerId ?? null,
+          loserId,
+          xpTransferred,
+          outcome,
+          Math.floor(nowMs / 1000),
+        ),
+      );
+
+      // (3) XP mutations — only added when there's a real transfer.
+      // SQL expression `xp = xp ± ?` is the atomic increment pattern
+      // (no read-modify-write race). D-19 allows negative XP — no floor
+      // constraint on this column.
+      if (xpTransferred > 0 && winnerId && loserId) {
+        stmts.push(
+          this.env.DB.prepare(
+            "UPDATE user_stats SET xp = xp - ?, updated_at = ? WHERE user_id = ?",
+          ).bind(xpTransferred, Math.floor(nowMs / 1000), loserId),
+        );
+        stmts.push(
+          this.env.DB.prepare(
+            "UPDATE user_stats SET xp = xp + ?, updated_at = ? WHERE user_id = ?",
+          ).bind(xpTransferred, Math.floor(nowMs / 1000), winnerId),
+        );
+      }
+
+      try {
+        await this.env.DB.batch(stmts);
+      } catch {
+        // D1 batch executes as a SINGLE SQL transaction with automatic
+        // rollback on any statement failure (SEC-05). On failure here
+        // (e.g. FK drift, transient D1 error, missing battles row in
+        // unit-test scenarios), NONE of the statements committed —
+        // XP is NOT in a partial state. We still transition DO runtime
+        // to ended/forfeited so clients get their terminal event, and
+        // force xpTransferred → 0 so the end event doesn't advertise
+        // a transfer that didn't happen. Ctx.storage remains the
+        // source of truth for DO-level state.
+        xpTransferred = 0;
+      }
+    }
+
+    // ── Level-up detection (post-batch) ──────────────────────────────
+    let leveledUp = false;
+    let newLevel: number | undefined;
+    if (!alreadySettled && winnerId && xpTransferred > 0) {
+      const newXp = priorWinnerXp + xpTransferred;
+      const oldLevel = computeLevel(priorWinnerXp).level;
+      const newLevelInfo = computeLevel(newXp);
+      leveledUp = newLevelInfo.level > oldLevel;
+      newLevel = newLevelInfo.level;
+    }
+
+    // ── Runtime state transition + broadcast ─────────────────────────
     runtime.endBroadcasted = true;
     runtime.phase = outcome === "forfeit" ? "forfeited" : "ended";
-
-    const hostScore = runtime.scores[config.hostId] ?? 0;
-    const guestScore = config.guestId
-      ? (runtime.scores[config.guestId] ?? 0)
-      : 0;
-
     await this.ctx.storage.put("runtime", runtime);
+
+    // Per-client xpDelta record: winner gets +xpTransferred, loser −xpTransferred.
+    const xpDelta: Record<string, number> = {};
+    if (xpTransferred > 0 && winnerId && loserId) {
+      xpDelta[winnerId] = xpTransferred;
+      xpDelta[loserId] = -xpTransferred;
+    }
 
     this.broadcast({
       type: "end",
@@ -638,29 +964,13 @@ export class BattleRoom extends DurableObject<Env> {
       hostScore,
       guestScore,
       outcome,
-      // TODO(Plan 08): xpTransferred populated here once atomic XP transfer
-      // via env.DB.batch([...]) lands. Wave 2 emits 0 — Plan 04 reads the
-      // D1 `battles` row for final result rendering.
-      xpTransferred: 0,
+      xpTransferred,
+      hostWagerAmount,
+      guestWagerAmount,
+      xpDelta,
+      leveledUp,
+      newLevel,
     });
-
-    // Persist final scores / winner to the battles row so Plan 04's results
-    // endpoint has durable state even after the DO self-destructs.
-    try {
-      const db = drizzle(this.env.DB, { schema });
-      await db
-        .update(schema.battles)
-        .set({
-          status: outcome === "forfeit" ? "forfeited" : "completed",
-          winnerId: winnerId ?? null,
-          hostFinalScore: hostScore,
-          guestFinalScore: guestScore,
-          completedAt: new Date(),
-        })
-        .where(eq(schema.battles.id, config.battleId));
-    } catch {
-      // Swallow — tests may not have a `battles` row for every scenario.
-    }
 
     // Post-end grace window: Plan 04 clients may fetch the battles row
     // immediately after the end event; 30s later the DO self-destructs.
@@ -754,14 +1064,60 @@ export class BattleRoom extends DurableObject<Env> {
       return;
     }
 
+    // ── Reconnect resumption (D-25) ──────────────────────────────────
+    // If a disconnect bucket exists for THIS userId, cancel the grace
+    // alarm and resume the paused question timer so the disconnect
+    // window does not count toward the 15s answer timer.
+    const disconnect =
+      await this.ctx.storage.get<DisconnectRecord>("disconnect");
+    if (
+      disconnect &&
+      disconnect.userId === att.userId &&
+      runtime.phase === "opponent-reconnecting"
+    ) {
+      const nowMs = Date.now();
+      const remaining = Math.max(0, disconnect.pausedQuestionRemainingMs);
+
+      // Cancel the pending 30s grace alarm. If `remaining > 0`, replace
+      // with a fresh question alarm; otherwise let advanceQuestion
+      // handle the zero-time case on its normal flow.
+      try {
+        await this.ctx.storage.deleteAlarm();
+      } catch {
+        /* ignore */
+      }
+
+      // Resume: reset questionStartedAtMs so `started + 15s = now +
+      // remaining`. This preserves the elapsed-before-disconnect and
+      // makes the total question budget unchanged by the pause window.
+      runtime.questionStartedAtMs = nowMs - (BATTLE_TIME_LIMIT_MS - remaining);
+      runtime.phase = disconnect.preDisconnectPhase;
+      await this.ctx.storage.put("runtime", runtime);
+
+      if (remaining > 0) {
+        await this.ctx.storage.setAlarm(nowMs + remaining);
+      } else {
+        // No time left → fire the alarm immediately to advance round.
+        await this.ctx.storage.setAlarm(nowMs);
+      }
+
+      await this.ctx.storage.delete("disconnect");
+
+      // Announce to the OTHER connected socket that the disconnect has
+      // cleared. `broadcast` reaches every live peer including the
+      // reconnecting one — the snapshot below is the reconnecting
+      // client's authoritative state source; the opponent-reconnected
+      // event is strictly UI signal.
+      this.broadcast({ type: "opponent-reconnected" });
+    }
+
+    // ── Always: send a full snapshot to the reconnecting client ─────
+    // Server-derived, never trusts client state. Strips correctOptionId
+    // and explanation from any embedded question (T-04-REVEAL-LEAK).
     const hostScore = runtime.scores[config.hostId] ?? 0;
     const guestScore = config.guestId
       ? (runtime.scores[config.guestId] ?? 0)
       : 0;
-
-    // TODO(Plan 08): full reconnect snapshot (remaining question time,
-    // current question body if phase==active, last reveal if between
-    // questions). Wave 2 emits the minimal snapshot shape.
     const currentIdx = runtime.currentQuestionIndex;
     const q =
       runtime.phase === "tiebreak"
