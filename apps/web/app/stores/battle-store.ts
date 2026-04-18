@@ -369,9 +369,14 @@ export const useBattleStore = create<BattleState>((set, get) => ({
     }),
 
   tickTimer: () => {
-    const { questionStartedAtMs, currentQuestion, phase } = get();
+    const { questionStartedAtMs, currentQuestion, phase, revealCorrectOptionId } = get();
     if (!questionStartedAtMs || !currentQuestion) return;
     if (phase !== "active" && phase !== "tiebreak") return;
+    // WR-05: once the server emits `reveal`, it has already moved on to
+    // the next question. Freeze the displayed countdown so the old
+    // questionStartedAtMs doesn't drift to 0 during the sub-ms gap
+    // before the next `question` event re-seeds the timer.
+    if (revealCorrectOptionId != null) return;
     const elapsed = Date.now() - questionStartedAtMs;
     const remaining = Math.max(0, currentQuestion.timeLimitMs - elapsed);
     set({ timeRemainingMs: remaining });
