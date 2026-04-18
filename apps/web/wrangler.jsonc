@@ -29,11 +29,30 @@
 			"remote": true
 		}
 	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "BATTLE_ROOM",
+				"class_name": "BattleRoom"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["BattleRoom"]
+		}
+	],
 	"workflows": [
 		{
 			"name": "content-generation",
 			"binding": "CONTENT_WORKFLOW",
 			"class_name": "ContentGenerationWorkflow"
+		},
+		{
+			"name": "battle-question-generation",
+			"binding": "BATTLE_QUESTION_WORKFLOW",
+			"class_name": "BattleQuestionGenerationWorkflow"
 		}
 	],
 	"vars": {
@@ -52,6 +71,18 @@
 				"type": "ratelimit",
 				"namespace_id": "1002",
 				"simple": { "limit": 5, "period": 60 }
+			},
+			{
+				"name": "RATE_LIMITER_BATTLE_CREATE",
+				"type": "ratelimit",
+				"namespace_id": "1003",
+				"simple": { "limit": 5, "period": 60 }
+			},
+			{
+				"name": "RATE_LIMITER_BATTLE_JOIN",
+				"type": "ratelimit",
+				"namespace_id": "1004",
+				"simple": { "limit": 10, "period": 60 }
 			}
 		]
 	}

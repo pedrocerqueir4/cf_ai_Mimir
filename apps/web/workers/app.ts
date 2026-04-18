@@ -16,6 +16,8 @@ import { gamificationRoutes } from "../../../worker/src/routes/gamification";
 
 // Re-export Workflow entrypoint so Miniflare can find the named entrypoint
 export { ContentGenerationWorkflow } from "../../../worker/src/workflows/ContentGenerationWorkflow";
+export { BattleRoom } from "../../../worker/src/durable-objects/BattleRoom";
+export { BattleQuestionGenerationWorkflow } from "../../../worker/src/workflows/BattleQuestionGenerationWorkflow";
 
 declare module "react-router" {
   export interface AppLoadContext {
@@ -37,8 +39,12 @@ interface AppEnv {
   AI: Ai;
   VECTORIZE: VectorizeIndex;
   CONTENT_WORKFLOW: Workflow;
+  BATTLE_QUESTION_WORKFLOW: Workflow;
+  BATTLE_ROOM: DurableObjectNamespace;
   RATE_LIMITER_AUTH: RateLimit;
   RATE_LIMITER_REGISTER: RateLimit;
+  RATE_LIMITER_BATTLE_CREATE: RateLimit;
+  RATE_LIMITER_BATTLE_JOIN: RateLimit;
 }
 
 // ---------------------------------------------------------------------------
