@@ -1,10 +1,44 @@
+# Project/tooling state (not for the repo)
 .planning/
 .claude/
+
+# Dependencies & build output
 node_modules/
 dist/
+build/
+.cache/
+.turbo/
+.next/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# Cloudflare local state
 .wrangler/
-.dev.vars
+
+# Secrets / environment
+.dev.vars*
 *.local
 .env
 .env.*
 !.env.example
+!.dev.vars.example
+
+# Private keys / credential dumps
+secrets.json
+secrets.*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# IDE / editor state
+.idea/
+.vscode/
+.cursor/
+.aider*
+
+# OS junk
+.DS_Store
+Thumbs.db
