@@ -13,7 +13,7 @@ export default defineConfig({
     include: [path.resolve(__dirname, "../tests/**/*.test.ts")],
     pool: cloudflarePool({
       wrangler: {
-        configPath: path.resolve(__dirname, "./wrangler.toml"),
+        configPath: path.resolve(__dirname, "./wrangler.jsonc"),
       },
       miniflare: {
         d1Databases: ["DB"],

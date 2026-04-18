@@ -1,0 +1,81 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "mimir-api",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-03-29",
+	"compatibility_flags": ["nodejs_compat"],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "mimir-db",
+			"database_id": "local",
+			"migrations_dir": "src/db/migrations"
+		}
+	],
+	"ai": {
+		"binding": "AI"
+	},
+	"vectorize": [
+		{
+			"binding": "VECTORIZE",
+			"index_name": "mimir-lessons"
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "BATTLE_ROOM",
+				"class_name": "BattleRoom"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["BattleRoom"]
+		}
+	],
+	"workflows": [
+		{
+			"name": "content-generation",
+			"binding": "CONTENT_WORKFLOW",
+			"class_name": "ContentGenerationWorkflow"
+		},
+		{
+			"name": "battle-question-generation",
+			"binding": "BATTLE_QUESTION_WORKFLOW",
+			"class_name": "BattleQuestionGenerationWorkflow"
+		}
+	],
+	"vars": {
+		"PUBLIC_URL": "http://localhost:5173"
+	},
+	"unsafe": {
+		"bindings": [
+			{
+				"name": "RATE_LIMITER_AUTH",
+				"type": "ratelimit",
+				"namespace_id": "1001",
+				"simple": { "limit": 10, "period": 60 }
+			},
+			{
+				"name": "RATE_LIMITER_REGISTER",
+				"type": "ratelimit",
+				"namespace_id": "1002",
+				"simple": { "limit": 5, "period": 60 }
+			},
+			{
+				"name": "RATE_LIMITER_BATTLE_CREATE",
+				"type": "ratelimit",
+				"namespace_id": "1003",
+				"simple": { "limit": 5, "period": 60 }
+			},
+			{
+				"name": "RATE_LIMITER_BATTLE_JOIN",
+				"type": "ratelimit",
+				"namespace_id": "1004",
+				"simple": { "limit": 10, "period": 60 }
+			}
+		]
+	}
+}

@@ -8,6 +8,12 @@ import {
   requireTurnstileAfterFailures,
 } from "./middleware/verify-turnstile";
 
+// Re-export DO + Workflow entrypoints so miniflare (vitest) can resolve the
+// class_name strings declared in wrangler.jsonc. The actual runtime deploy
+// goes through apps/web/workers/app.ts which has its own re-exports.
+export { BattleRoom } from "./durable-objects/BattleRoom";
+export { BattleQuestionGenerationWorkflow } from "./workflows/BattleQuestionGenerationWorkflow";
+
 const app = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
 app.use("/*", cors());
