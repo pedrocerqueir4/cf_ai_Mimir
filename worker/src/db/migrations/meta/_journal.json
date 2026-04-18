@@ -29,6 +29,13 @@
       "when": 1776361600000,
       "tag": "0003_user_stats",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1776509771399,
+      "tag": "0004_battle_tables",
+      "breakpoints": true
     }
   ]
 }

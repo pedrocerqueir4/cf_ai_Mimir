@@ -107,6 +107,73 @@ const CREATE_STATEMENTS = [
     last_active_roadmap_id TEXT REFERENCES roadmaps(id) ON DELETE SET NULL,
     updated_at INTEGER NOT NULL
   )`,
+  // Phase 4 battle tables — must match worker/src/db/schema.ts
+  `CREATE TABLE IF NOT EXISTS battle_pool_topics (
+    id TEXT PRIMARY KEY,
+    topic TEXT NOT NULL,
+    status TEXT NOT NULL,
+    workflow_run_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS battle_quiz_pool (
+    id TEXT PRIMARY KEY,
+    pool_topic_id TEXT NOT NULL REFERENCES battle_pool_topics(id) ON DELETE CASCADE,
+    question_text TEXT NOT NULL,
+    question_type TEXT NOT NULL,
+    options_json TEXT NOT NULL,
+    correct_option_id TEXT NOT NULL,
+    explanation TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS battles (
+    id TEXT PRIMARY KEY,
+    join_code TEXT NOT NULL,
+    host_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    guest_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    host_roadmap_id TEXT NOT NULL REFERENCES roadmaps(id) ON DELETE CASCADE,
+    guest_roadmap_id TEXT REFERENCES roadmaps(id) ON DELETE CASCADE,
+    winning_roadmap_id TEXT REFERENCES roadmaps(id) ON DELETE SET NULL,
+    winning_topic TEXT,
+    pool_topic_id TEXT REFERENCES battle_pool_topics(id) ON DELETE SET NULL,
+    question_count INTEGER NOT NULL,
+    host_wager_tier INTEGER,
+    guest_wager_tier INTEGER,
+    applied_wager_tier INTEGER,
+    host_wager_amount INTEGER,
+    guest_wager_amount INTEGER,
+    wager_amount INTEGER,
+    status TEXT NOT NULL,
+    winner_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    host_final_score INTEGER,
+    guest_final_score INTEGER,
+    created_at INTEGER NOT NULL,
+    completed_at INTEGER
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_battles_lobby_joincode ON battles(join_code) WHERE status = 'lobby'`,
+  `CREATE INDEX IF NOT EXISTS idx_battles_host_status ON battles(host_id, status)`,
+  `CREATE INDEX IF NOT EXISTS idx_battles_guest_status ON battles(guest_id, status)`,
+  `CREATE INDEX IF NOT EXISTS idx_battles_completed_at ON battles(completed_at)`,
+  `CREATE TABLE IF NOT EXISTS battle_answers (
+    id TEXT PRIMARY KEY,
+    battle_id TEXT NOT NULL REFERENCES battles(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    question_id TEXT NOT NULL REFERENCES battle_quiz_pool(id) ON DELETE RESTRICT,
+    question_index INTEGER NOT NULL,
+    selected_option_id TEXT,
+    correct INTEGER NOT NULL DEFAULT 0,
+    response_time_ms INTEGER NOT NULL,
+    points_awarded INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS battle_ledger (
+    battle_id TEXT PRIMARY KEY REFERENCES battles(id) ON DELETE CASCADE,
+    winner_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    loser_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    xp_amount INTEGER NOT NULL,
+    outcome TEXT NOT NULL,
+    settled_at INTEGER NOT NULL
+  )`,
 ];
 
 // Apply D1 migrations before tests run.

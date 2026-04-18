@@ -72,6 +72,82 @@ export const userStats = sqliteTable("user_stats", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
+// ─── Multiplayer Battle Tables (Phase 4) ─────────────────────────────────────
+// Shared question pool (cross-user-readable, D-07) + per-battle state + ledger.
+// The battles row is the source of truth for participant state — hostId/guestId
+// and their matching wager/score columns replace a separate participants table.
+
+export const battlePoolTopics = sqliteTable("battle_pool_topics", {
+  id: text("id").primaryKey(),
+  topic: text("topic").notNull(),
+  status: text("status", { enum: ["generating", "ready", "failed"] }).notNull(),
+  workflowRunId: text("workflow_run_id"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const battleQuizPool = sqliteTable("battle_quiz_pool", {
+  id: text("id").primaryKey(),
+  poolTopicId: text("pool_topic_id").notNull().references(() => battlePoolTopics.id, { onDelete: "cascade" }),
+  questionText: text("question_text").notNull(),
+  questionType: text("question_type", { enum: ["mcq", "true_false"] }).notNull(),
+  optionsJson: text("options_json").notNull(),
+  correctOptionId: text("correct_option_id").notNull(),
+  explanation: text("explanation").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+export const battles = sqliteTable("battles", {
+  id: text("id").primaryKey(),
+  joinCode: text("join_code").notNull(),
+  hostId: text("host_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  guestId: text("guest_id").references(() => users.id, { onDelete: "cascade" }),
+  hostRoadmapId: text("host_roadmap_id").notNull().references(() => roadmaps.id, { onDelete: "cascade" }),
+  guestRoadmapId: text("guest_roadmap_id").references(() => roadmaps.id, { onDelete: "cascade" }),
+  winningRoadmapId: text("winning_roadmap_id").references(() => roadmaps.id, { onDelete: "set null" }),
+  winningTopic: text("winning_topic"),
+  poolTopicId: text("pool_topic_id").references(() => battlePoolTopics.id, { onDelete: "set null" }),
+  questionCount: integer("question_count").notNull(),
+  hostWagerTier: integer("host_wager_tier"),
+  guestWagerTier: integer("guest_wager_tier"),
+  appliedWagerTier: integer("applied_wager_tier"),
+  hostWagerAmount: integer("host_wager_amount"),
+  guestWagerAmount: integer("guest_wager_amount"),
+  wagerAmount: integer("wager_amount"),
+  status: text("status", {
+    enum: ["lobby", "pre-battle", "active", "completed", "forfeited", "expired"],
+  }).notNull(),
+  winnerId: text("winner_id").references(() => users.id, { onDelete: "set null" }),
+  hostFinalScore: integer("host_final_score"),
+  guestFinalScore: integer("guest_final_score"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  completedAt: integer("completed_at", { mode: "timestamp" }),
+});
+// Partial UNIQUE index on join_code (WHERE status='lobby') is appended manually
+// to the generated migration SQL — Drizzle Kit does not emit partial indexes.
+
+export const battleAnswers = sqliteTable("battle_answers", {
+  id: text("id").primaryKey(),
+  battleId: text("battle_id").notNull().references(() => battles.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  questionId: text("question_id").notNull().references(() => battleQuizPool.id, { onDelete: "restrict" }),
+  questionIndex: integer("question_index").notNull(),
+  selectedOptionId: text("selected_option_id"),
+  correct: integer("correct", { mode: "boolean" }).notNull().default(false),
+  responseTimeMs: integer("response_time_ms").notNull(),
+  pointsAwarded: integer("points_awarded").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+export const battleLedger = sqliteTable("battle_ledger", {
+  battleId: text("battle_id").primaryKey().references(() => battles.id, { onDelete: "cascade" }),
+  winnerId: text("winner_id").references(() => users.id, { onDelete: "set null" }),
+  loserId: text("loser_id").references(() => users.id, { onDelete: "set null" }),
+  xpAmount: integer("xp_amount").notNull(),
+  outcome: text("outcome", { enum: ["decisive", "forfeit", "both-dropped"] }).notNull(),
+  settledAt: integer("settled_at", { mode: "timestamp" }).notNull(),
+});
+
 // ─── Auth Tables (Phase 1) ────────────────────────────────────────────────────
 
 export const users = sqliteTable("users", {
