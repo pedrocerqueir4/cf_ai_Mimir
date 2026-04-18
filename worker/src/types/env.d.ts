@@ -22,4 +22,7 @@ interface Env {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   TURNSTILE_SECRET_KEY: string;
+  // Runtime environment tag — only `"test"` unlocks DO __test* ops. Unset
+  // in production wrangler config so test-only paths return 404.
+  ENVIRONMENT?: string;
 }

@@ -48,7 +48,8 @@
 		}
 	],
 	"vars": {
-		"PUBLIC_URL": "http://localhost:5173"
+		"PUBLIC_URL": "http://localhost:5173",
+		"ENVIRONMENT": "test"
 	},
 	"unsafe": {
 		"bindings": [

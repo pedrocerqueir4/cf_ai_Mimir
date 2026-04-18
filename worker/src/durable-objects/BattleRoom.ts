@@ -170,11 +170,21 @@ export class BattleRoom extends DurableObject<Env> {
       case "snapshot":
         return this.opSnapshot();
       case "__testAlarm":
+        // WR-03: test-only op; production builds MUST NOT respond. Guard by
+        // the ENVIRONMENT var — only "test" unlocks. Any other value
+        // (undefined in prod wrangler config) returns 404 matching an
+        // unknown op, preventing accidental proxying from HTTP routes.
+        if (this.env.ENVIRONMENT !== "test") {
+          return new Response(`Unknown op: ${op}`, { status: 400 });
+        }
         await this.alarm();
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "content-type": "application/json" },
         });
       case "__testEndBattle": {
+        if (this.env.ENVIRONMENT !== "test") {
+          return new Response(`Unknown op: ${op}`, { status: 400 });
+        }
         const p = payload as {
           winnerId?: string | null;
           outcome?: "decisive" | "forfeit" | "both-dropped";
