@@ -10,6 +10,11 @@ interface Env {
   AI: Ai;
   VECTORIZE: VectorizeIndex;
   CONTENT_WORKFLOW: Workflow;
+  // Phase 4: Multiplayer battle bindings
+  BATTLE_ROOM: DurableObjectNamespace;
+  BATTLE_QUESTION_WORKFLOW: Workflow;
+  RATE_LIMITER_BATTLE_CREATE: RateLimit;
+  RATE_LIMITER_BATTLE_JOIN: RateLimit;
   // Environment variables
   PUBLIC_URL: string;
   GOOGLE_CLIENT_ID: string;
