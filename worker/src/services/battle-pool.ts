@@ -278,7 +278,7 @@ export async function findOrQueueTopic(
   // Use raw SQL with INSERT OR IGNORE — Drizzle's onConflictDoNothing
   // requires a conflict target, and we want the global UNIQUE on (topic)
   // to handle the race. affected_rows lets us detect who won.
-  const insertResult = await env.DB
+  await env.DB
     .prepare(
       `INSERT OR IGNORE INTO battle_pool_topics
          (id, topic, status, workflow_run_id, created_at, updated_at)
@@ -292,9 +292,6 @@ export async function findOrQueueTopic(
       Math.floor(now.getTime() / 1000),
     )
     .run();
-
-  const inserted = (insertResult.meta?.changes ?? insertResult.meta?.changed_db ?? 0) !== 0
-    || insertResult.meta?.rows_written !== undefined && insertResult.meta.rows_written > 0;
 
   // Fall back: SELECT by topic to read the canonical row. Covers both the
   // "we inserted" case (row exists under poolTopicId) and the race loser
@@ -316,7 +313,13 @@ export async function findOrQueueTopic(
   const canonicalId = canonical.id;
   const canonicalWorkflowId = canonical.workflow_run_id ?? canonicalId;
 
-  if (canonicalId === poolTopicId && inserted) {
+  // WR-04: race-winner detection via id equality. If the canonical row id
+  // matches the UUID we attempted to INSERT, we won and own the workflow
+  // scheduling duty. Otherwise someone else raced ahead under a different
+  // UUID — don't schedule a duplicate. This replaces a brittle inspection
+  // of `insertResult.meta.*` counters, which historically drifted between
+  // Cloudflare D1 runtime versions.
+  if (canonicalId === poolTopicId) {
     // WINNER — schedule the workflow.
     await env.BATTLE_QUESTION_WORKFLOW.create({
       id: canonicalId,
