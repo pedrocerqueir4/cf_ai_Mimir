@@ -347,6 +347,21 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
   // expired row can safely linger, but UX-wise treat it as gone.
   const createdAtMs = battle.createdAt.getTime();
   if (createdAtMs < lobbyCutoffMs) {
+    // WR-06: fire-and-forget cleanup of the zombie row so the partial
+    // UNIQUE(join_code, status='lobby') index frees up. The DO's
+    // expireLobby alarm is best-effort — a missed D1 write leaves the
+    // status='lobby' row pinned forever without this sweeper.
+    try {
+      await db
+        .update(schema.battles)
+        .set({ status: "expired" })
+        .where(eq(schema.battles.id, battle.id));
+    } catch (err) {
+      console.error(
+        "[battle join] zombie-lobby cleanup failed",
+        JSON.stringify({ battleId: battle.id, err: String(err) }),
+      );
+    }
     return c.json({ error: "No battle found with this code." }, 404);
   }
 

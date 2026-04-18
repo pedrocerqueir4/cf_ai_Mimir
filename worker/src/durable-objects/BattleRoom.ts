@@ -1198,8 +1198,16 @@ export class BattleRoom extends DurableObject<Env> {
           .update(schema.battles)
           .set({ status: "expired" })
           .where(eq(schema.battles.id, config.battleId));
-      } catch {
-        /* ignore — battles row may be absent in unit-test scenarios */
+      } catch (err) {
+        // WR-06: a missed write leaves a zombie status='lobby' row that
+        // pins the partial UNIQUE(join_code) index. The /join handler
+        // has a fallback sweeper for the same condition, but log here
+        // so ops visibility exists for manual cleanup when neither path
+        // reaches the row.
+        console.error(
+          "[BattleRoom expireLobby] D1 write failed",
+          JSON.stringify({ battleId: config.battleId, err: String(err) }),
+        );
       }
     }
     await this.destroyBattle();
