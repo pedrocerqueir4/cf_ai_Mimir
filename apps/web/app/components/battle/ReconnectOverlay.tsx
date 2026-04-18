@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -9,7 +9,12 @@ interface ReconnectOverlayProps {
   open: boolean;
   /** Opponent name — empty string if unknown. Used in headings + toast. */
   opponentName: string;
-  /** Remaining 30s grace window in milliseconds. Ticks down via parent. */
+  /**
+   * Initial remaining 30s grace window in milliseconds captured on the
+   * store event. The overlay owns the per-second countdown derived from
+   * this initial value plus the mount timestamp — the parent does NOT
+   * tick this prop down.
+   */
   graceRemainingMs: number;
   /**
    * True when THE LOCAL USER is the one who dropped (we're trying to
@@ -63,7 +68,29 @@ export function ReconnectOverlay({
     };
   }, [open, isSelfDisconnect, opponentName]);
 
-  const seconds = Math.max(0, Math.ceil(graceRemainingMs / 1_000));
+  // Countdown — compute remaining every 250ms from `graceRemainingMs`
+  // captured the moment the overlay opened. The parent's prop may mutate
+  // if the store re-delivers a fresh value (e.g. a second disconnect) —
+  // the `open`/`graceRemainingMs` dependency pair re-seeds the baseline.
+  // WR-01: prior impl relied on the parent to tick; the store field was
+  // set once on disconnect and never updated, so the number was frozen.
+  const [remainingMs, setRemainingMs] = useState(graceRemainingMs);
+  useEffect(() => {
+    if (!open) {
+      setRemainingMs(graceRemainingMs);
+      return;
+    }
+    const startMs = Date.now();
+    const initial = graceRemainingMs;
+    setRemainingMs(initial);
+    const id = window.setInterval(() => {
+      const next = Math.max(0, initial - (Date.now() - startMs));
+      setRemainingMs(next);
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [open, graceRemainingMs]);
+
+  const seconds = Math.max(0, Math.ceil(remainingMs / 1_000));
 
   return (
     <DialogPrimitive.Root open={open}>
