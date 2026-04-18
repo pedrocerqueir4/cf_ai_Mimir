@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from "~/components/ui/avatar";
 
 import { useChatStore } from "~/stores/chat-store";
 import { sendChatMessage, pollGenerationStatus } from "~/lib/api-client";
+import { randomId } from "~/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -245,11 +246,7 @@ export default function ChatPage() {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const conversationId = useRef<string>(
-    typeof crypto !== "undefined"
-      ? crypto.randomUUID()
-      : `conv-${Date.now()}`
-  );
+  const conversationId = useRef<string>(randomId());
 
   const { setConversationId, setStreaming: setStoreStreaming } = useChatStore();
 
@@ -288,7 +285,7 @@ export default function ChatPage() {
 
     // Add user message
     const userMsg: LocalMessage = {
-      id: crypto.randomUUID(),
+      id: randomId(),
       role: "user",
       content: trimmed,
       createdAt: new Date().toISOString(),
@@ -300,7 +297,7 @@ export default function ChatPage() {
     }
 
     // Show typing indicator
-    const typingId = crypto.randomUUID();
+    const typingId = randomId();
     const typingMsg: LocalMessage = {
       id: typingId,
       role: "assistant",
@@ -318,7 +315,7 @@ export default function ChatPage() {
 
       if (contentType.includes("text/event-stream")) {
         // SSE streaming response — replace typing indicator with empty AI message
-        const aiMsgId = crypto.randomUUID();
+        const aiMsgId = randomId();
         setMessages((prev) =>
           prev.map((m) =>
             m.id === typingId
@@ -378,7 +375,7 @@ export default function ChatPage() {
         };
 
         if (json.type === "generation_started" && json.workflowRunId) {
-          const generationId = crypto.randomUUID();
+          const generationId = randomId();
           // Remove typing indicator
           setMessages((prev) => prev.filter((m) => m.id !== typingId));
           // Add generation progress message
@@ -401,7 +398,7 @@ export default function ChatPage() {
             prev.map((m) =>
               m.id === typingId
                 ? {
-                    id: crypto.randomUUID(),
+                    id: randomId(),
                     role: "assistant",
                     content: "Couldn't get a response. Please try your message again.",
                     createdAt: new Date().toISOString(),
@@ -417,7 +414,7 @@ export default function ChatPage() {
         prev.map((m) =>
           m.id === typingId
             ? {
-                id: crypto.randomUUID(),
+                id: randomId(),
                 role: "assistant",
                 content: "Couldn't get a response. Please try your message again.",
                 createdAt: new Date().toISOString(),
