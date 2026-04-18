@@ -36,6 +36,13 @@
       "when": 1776509771399,
       "tag": "0004_battle_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1776516345601,
+      "tag": "0005_battle_pool_topic_unique",
+      "breakpoints": true
     }
   ]
 }

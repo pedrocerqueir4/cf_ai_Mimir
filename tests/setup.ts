@@ -116,6 +116,9 @@ const CREATE_STATEMENTS = [
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   )`,
+  // UNIQUE on topic enables T-04-10 race-dedup via INSERT OR IGNORE.
+  // Matches worker/src/db/migrations/0005_battle_pool_topic_unique.sql.
+  `CREATE UNIQUE INDEX IF NOT EXISTS battle_pool_topics_topic_unique ON battle_pool_topics(topic)`,
   `CREATE TABLE IF NOT EXISTS battle_quiz_pool (
     id TEXT PRIMARY KEY,
     pool_topic_id TEXT NOT NULL REFERENCES battle_pool_topics(id) ON DELETE CASCADE,

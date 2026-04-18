@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `battle_pool_topics_topic_unique` ON `battle_pool_topics` (`topic`);

@@ -79,7 +79,11 @@ export const userStats = sqliteTable("user_stats", {
 
 export const battlePoolTopics = sqliteTable("battle_pool_topics", {
   id: text("id").primaryKey(),
-  topic: text("topic").notNull(),
+  // UNIQUE on normalized topic — powers T-04-10 race dedup in findOrQueueTopic:
+  // concurrent miss-INSERTs for the same topic deterministically fall through to
+  // INSERT OR IGNORE, letting the loser SELECT the winner's row and re-use its
+  // in-flight Workflow instead of scheduling a duplicate.
+  topic: text("topic").notNull().unique(),
   status: text("status", { enum: ["generating", "ready", "failed"] }).notNull(),
   workflowRunId: text("workflow_run_id"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
