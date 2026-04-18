@@ -85,6 +85,14 @@ export const BattleEndEvent = z.object({
   guestScore: z.number().int().nonnegative(),
   outcome: z.enum(["decisive", "forfeit", "both-dropped"]),
   xpTransferred: z.number().int().nonnegative(),
+  // Plan 08 settlement fields — DO emits these on every `end`. Optional
+  // on the schema so legacy captures / test fixtures that omit them still
+  // parse, but production broadcasts always include them.
+  hostWagerAmount: z.number().int().nonnegative().optional(),
+  guestWagerAmount: z.number().int().nonnegative().optional(),
+  xpDelta: z.record(z.string(), z.number().int()).optional(),
+  leveledUp: z.boolean().optional(),
+  newLevel: z.number().int().positive().optional(),
 });
 
 export const BattleWaitingForQuestionsEvent = z.object({

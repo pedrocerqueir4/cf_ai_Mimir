@@ -335,6 +335,8 @@ export const useBattleStore = create<BattleState>((set, get) => ({
         guestScore: evt.guestScore,
         outcome: evt.outcome,
         xpTransferred: evt.xpTransferred,
+        leveledUp: evt.leveledUp,
+        newLevel: evt.newLevel,
       },
       phase: "ended",
     });
