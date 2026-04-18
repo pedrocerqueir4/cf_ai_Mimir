@@ -38,6 +38,7 @@ import { verifyOwnership } from "../middleware/idor-check";
 import { generateUniqueCode } from "../lib/join-code";
 import { computeWagerAmount, type WagerTier } from "../lib/battle-scoring";
 import { findOrQueueTopic, sampleQuestions } from "../services/battle-pool";
+import { assertTopicSafe } from "../validation/battle-prompts";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -53,10 +54,21 @@ const CreateBattleBody = z.object({
     .or(z.literal(15)),
 });
 
-const JoinBattleBody = z.object({
-  joinCode: z.string().min(6).max(6),
-  roadmapId: z.string().min(1),
-});
+// Join accepts EITHER a `roadmapId` (user brings their own roadmap; server
+// verifies ownership) OR a `presetTopic` (guest with no roadmaps picks from
+// the BATTLE_STARTER_TOPICS list; the topic string itself is the handle, no
+// IDOR check applies because nothing is being referenced). Exactly one must
+// be present — the refinement below rejects both / neither.
+const JoinBattleBody = z
+  .object({
+    joinCode: z.string().min(6).max(6),
+    roadmapId: z.string().min(1).optional(),
+    presetTopic: z.string().min(1).max(120).optional(),
+  })
+  .refine(
+    (v) => Boolean(v.roadmapId) !== Boolean(v.presetTopic),
+    { message: "Exactly one of roadmapId or presetTopic is required" },
+  );
 
 // T-04-03: server-side enum hard-gate. Any non-{10,15,20} value rejected at
 // parse time. `computeWagerAmount` assumes the tier is one of these three.
@@ -308,7 +320,7 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
   if (!parsed.success) {
     return c.json({ error: "Invalid request body" }, 400);
   }
-  const { joinCode, roadmapId } = parsed.data;
+  const { joinCode, roadmapId, presetTopic } = parsed.data;
 
   const normalizedCode = joinCode.toUpperCase();
   const nowMs = Date.now();
@@ -346,16 +358,31 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
   }
 
   // IDOR: guest must own the roadmap they're bringing to the battle.
-  const guestRoadmap = await verifyOwnership(
-    db as any,
-    schema.roadmaps,
-    roadmapId,
-    userId,
-    schema.roadmaps.id,
-    schema.roadmaps.userId,
-  );
-  if (!guestRoadmap) {
-    return c.json({ error: "Roadmap not found" }, 404);
+  // Preset-topic branch is exempt because there is no referenced entity to
+  // own — the topic string IS the handle, validated by `assertTopicSafe`
+  // to bound length / reject injection sentinels.
+  let typedGuestRoadmap: typeof schema.roadmaps.$inferSelect | null = null;
+  let presetTopicSafe: string | null = null;
+  if (presetTopic) {
+    try {
+      assertTopicSafe(presetTopic);
+    } catch {
+      return c.json({ error: "Invalid topic" }, 400);
+    }
+    presetTopicSafe = presetTopic;
+  } else {
+    const guestRoadmap = await verifyOwnership(
+      db as any,
+      schema.roadmaps,
+      roadmapId!,
+      userId,
+      schema.roadmaps.id,
+      schema.roadmaps.userId,
+    );
+    if (!guestRoadmap) {
+      return c.json({ error: "Roadmap not found" }, 404);
+    }
+    typedGuestRoadmap = guestRoadmap as typeof schema.roadmaps.$inferSelect;
   }
 
   // Fetch host's roadmap — it's guaranteed to exist because it was
@@ -370,21 +397,30 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
     return c.json({ error: "Host roadmap not found" }, 500);
   }
 
-  // Coin-flip — server picks winning roadmap uniformly (D-01).
+  // Coin-flip — server picks winning roadmap uniformly (D-01). When the
+  // guest is on a preset, the guest side has no roadmap row, so we synthesize
+  // a `{ id: null, topic: presetTopicSafe }` shape for the winning-side
+  // branch. The winning roadmap id will be null in that case, but
+  // `winningTopic` still drives the pool lookup which is what matters.
   const winnerIsHost = coinFlip();
-  const typedGuestRoadmap =
-    guestRoadmap as typeof schema.roadmaps.$inferSelect;
-  const winningRoadmap = winnerIsHost ? hostRoadmapRow : typedGuestRoadmap;
+  const guestSideRoadmap:
+    | typeof schema.roadmaps.$inferSelect
+    | { id: null; topic: string } =
+    typedGuestRoadmap ?? { id: null, topic: presetTopicSafe! };
+  const winningRoadmap = winnerIsHost ? hostRoadmapRow : guestSideRoadmap;
 
   // Update battles row with guest + coin-flip result. Status transitions to
   // 'pre-battle' regardless of pool state — the pre-battle phase spans both
-  // lobby-closed and questions-loading states.
+  // lobby-closed and questions-loading states. On a preset-topic join the
+  // guest has no roadmap of their own; `guestRoadmapId` and (if preset won
+  // the flip) `winningRoadmapId` both stay null — `winningTopic` alone
+  // drives the downstream pool lookup.
   await db
     .update(schema.battles)
     .set({
       guestId: userId,
-      guestRoadmapId: roadmapId,
-      winningRoadmapId: winningRoadmap.id,
+      guestRoadmapId: typedGuestRoadmap?.id ?? null,
+      winningRoadmapId: winningRoadmap.id ?? null,
       winningTopic: winningRoadmap.topic,
       status: "pre-battle",
     })
@@ -455,7 +491,7 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
     return c.json({
       status: "ready" as const,
       battleId: battle.id,
-      winningRoadmapId: winningRoadmap.id,
+      winningRoadmapId: winningRoadmap.id ?? null,
       winningTopic: winningRoadmap.topic,
       poolTopicId: lookup.poolTopicId,
     });
@@ -467,7 +503,7 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
     {
       status: "generating" as const,
       battleId: battle.id,
-      winningRoadmapId: winningRoadmap.id,
+      winningRoadmapId: winningRoadmap.id ?? null,
       winningTopic: winningRoadmap.topic,
       poolTopicId: lookup.poolTopicId,
       workflowRunId: lookup.workflowRunId,

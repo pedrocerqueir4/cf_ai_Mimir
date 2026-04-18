@@ -95,18 +95,22 @@ export default function BattleJoinPage() {
     setCodeError(null);
     setGeneralError(null);
     try {
-      // Preset ids aren't real roadmaps. For the MVP, we strip the prefix and
-      // send just the topic string as the roadmapId — Plan 04's server accepts
-      // this pattern today via the battleQuizPool topic lookup. If the server
-      // rejects (400), we surface the error below.
-      const roadmapIdToSend = selectedRoadmapId!.startsWith(PRESET_ID_PREFIX)
-        ? selectedRoadmapId!.slice(PRESET_ID_PREFIX.length)
-        : selectedRoadmapId!;
-
-      const response = await joinBattle({
-        joinCode,
-        roadmapId: roadmapIdToSend,
-      });
+      // Preset ids aren't real roadmap rows. The server accepts an alternate
+      // `presetTopic` field — branches past the IDOR roadmap-ownership check
+      // and uses the raw topic string as the pool lookup handle. Own roadmaps
+      // send `roadmapId` and go through the ownership-verified path.
+      const isPreset = selectedRoadmapId!.startsWith(PRESET_ID_PREFIX);
+      const response = await joinBattle(
+        isPreset
+          ? {
+              joinCode,
+              presetTopic: selectedRoadmapId!.slice(PRESET_ID_PREFIX.length),
+            }
+          : {
+              joinCode,
+              roadmapId: selectedRoadmapId!,
+            },
+      );
 
       navigate(`/battle/pre/${encodeURIComponent(response.battleId)}`, {
         state: {

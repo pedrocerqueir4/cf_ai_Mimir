@@ -511,7 +511,8 @@ export async function createBattle(body: {
  */
 export async function joinBattle(body: {
   joinCode: string;
-  roadmapId: string;
+  roadmapId?: string;
+  presetTopic?: string;
 }): Promise<BattleJoinResponse> {
   const response = await fetch("/api/battle/join", {
     method: "POST",
