@@ -193,8 +193,7 @@ export class BattleRoom extends DurableObject<Env> {
 
     // D-27 multi-tab eviction: close any OLDER socket for this userId.
     // `server` is the brand-new socket we just accepted — close all others
-    // that share the `userId` tag.
-    // TODO(Task 1b): replace this stub with the full eviction loop below.
+    // that share the `userId` tag. Asserted by battle.multitab.test.ts.
     for (const existing of this.ctx.getWebSockets(userId)) {
       if (existing !== server) {
         try {
@@ -449,7 +448,8 @@ export class BattleRoom extends DurableObject<Env> {
       await this.persistAnswersToD1(runtime, config);
 
       if (hostScore === guestScore) {
-        // TODO(Task 1b): enter tiebreak phase and pull reservedQuestions[0].
+        // D-15: enter sudden-death tiebreak — pull reservedQuestions[0]
+        // and keep looping until decisive. Asserted by battle.tiebreaker.test.ts.
         await this.enterTiebreak(runtime, config);
         return;
       }
@@ -544,10 +544,15 @@ export class BattleRoom extends DurableObject<Env> {
     runtime: BattleRuntime,
     config: BattleConfig,
   ): Promise<void> {
-    // TODO(Task 1b): full tiebreak implementation. Task 1a lands a minimal
-    // version so the "tie at end" branch doesn't throw; Task 1b replaces.
+    // D-15: sudden-death tiebreaker. Pulls reservedQuestions[round-1] and
+    // broadcasts it via startQuestion. resolveTiebreakRound (called from
+    // advanceQuestion when runtime.phase === "tiebreak") decides the
+    // winner per D-15 rules: first correct wins, ties on correctness
+    // break on points, then pull another reserve if still tied.
     if (config.reservedQuestions.length === 0) {
-      // No reserves — fallback: declare null winner to avoid lock-up.
+      // No reserves available — guard against lock-up. In production flow
+      // Plan 03 ensures reservedQuestions are seeded before startBattle;
+      // this branch is a safety valve.
       await this.endBattle(null, "both-dropped");
       return;
     }
@@ -711,11 +716,19 @@ export class BattleRoom extends DurableObject<Env> {
       }
 
       for (const row of rows) {
-        await db.insert(schema.battleAnswers).values(row).onConflictDoNothing();
+        try {
+          await db
+            .insert(schema.battleAnswers)
+            .values(row)
+            .onConflictDoNothing();
+        } catch {
+          // Per-row FK / schema drift is non-fatal. ctx.storage remains the
+          // source of truth for battle state; Plan 08 will add the durable
+          // ledger writes that make this table authoritative.
+        }
       }
     } catch {
-      // Non-fatal; the in-memory ctx.storage remains the source of truth
-      // until Plan 08 adds durable ledger writes.
+      // Outer failure is also non-fatal — same reasoning as above.
     }
   }
 
@@ -808,9 +821,9 @@ export class BattleRoom extends DurableObject<Env> {
   }
 
   private async expireLobby(): Promise<void> {
-    // TODO(Task 1b): mark D1 battles row as expired (status='expired'),
-    // then destroy. Wave 2 Task 1a just destroys; Task 1b adds the D1
-    // update + asserts it in battle.lobby.timeout.test.ts.
+    // D-04: 5-min lobby auto-destroy. Marks the battles D1 row as expired
+    // (so Plan 04's lobby-poll endpoint returns 410/Gone) then destroys the
+    // DO. Asserted by battle.lobby.timeout.test.ts.
     const config = await this.ctx.storage.get<BattleConfig>("config");
     if (config) {
       try {

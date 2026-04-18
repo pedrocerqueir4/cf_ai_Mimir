@@ -50,6 +50,13 @@ export default defineConfig({
     setupFiles: [path.resolve(__dirname, "../tests/setup.ts")],
     globals: true,
     include: [path.resolve(__dirname, "../tests/**/*.test.ts")],
+    // Run test files sequentially. vitest-pool-workers spins up one
+    // miniflare instance per file running in parallel by default; for
+    // Durable Object tests that share `env.BATTLE_ROOM` namespace (by
+    // design — same battleId → same DO instance) the cold-start races
+    // between concurrent DOs produce flaky results. Serial runs finish
+    // in ~28s for the full battle suite, well under the 90s budget.
+    fileParallelism: false,
     pool: cloudflarePool({
       wrangler: {
         configPath: path.resolve(__dirname, "./wrangler.jsonc"),
