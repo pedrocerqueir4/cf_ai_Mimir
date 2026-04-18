@@ -302,7 +302,13 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       currentQuestionIdx: evt.questionIndex,
       totalQuestions: evt.totalQuestions,
       timeRemainingMs: evt.remainingMs,
-      questionStartedAtMs: Date.now() - (evt.currentQuestion?.timeLimitMs ?? 15_000) + evt.remainingMs,
+      // WR-08: when the snapshot omits currentQuestion we can't derive a
+      // valid questionStartedAtMs — leave it null and let the next
+      // `question` event re-seed. Previously fell back to a hard-coded
+      // 15_000 that would silently drift if server-side limits ever change.
+      questionStartedAtMs: evt.currentQuestion
+        ? Date.now() - (evt.currentQuestion.timeLimitMs - evt.remainingMs)
+        : null,
       phase:
         evt.phase === "completed"
           ? "ended"
