@@ -364,3 +364,310 @@ export async function fetchUserStats(tz: string): Promise<UserStats> {
 
   return response.json() as Promise<UserStats>;
 }
+
+// ─── Battle Types ────────────────────────────────────────────────────────────
+
+export type BattleStatus =
+  | "lobby"
+  | "pre-battle"
+  | "active"
+  | "completed"
+  | "forfeited"
+  | "expired";
+
+export type PoolStatus = "generating" | "ready" | "failed";
+
+export interface BattleCreateResponse {
+  battleId: string;
+  joinCode: string;
+  questionCount: 5 | 10 | 15;
+  hostId: string;
+  expiresAt: number;
+}
+
+export interface BattleJoinResponseReady {
+  status: "ready";
+  battleId: string;
+  winningRoadmapId: string;
+  winningTopic: string;
+  poolTopicId: string;
+}
+
+export interface BattleJoinResponseGenerating {
+  status: "generating";
+  battleId: string;
+  winningRoadmapId: string;
+  winningTopic: string;
+  poolTopicId: string;
+  workflowRunId: string;
+}
+
+export type BattleJoinResponse =
+  | BattleJoinResponseReady
+  | BattleJoinResponseGenerating;
+
+export interface BattleLobbyState {
+  battleId: string;
+  joinCode: string;
+  status: BattleStatus;
+  hostId: string;
+  hostName: string;
+  hostRoadmapTitle: string;
+  hostWagerTier: 10 | 15 | 20 | null;
+  guestId: string | null;
+  guestName: string | null;
+  guestRoadmapTitle: string | null;
+  guestWagerTier: 10 | 15 | 20 | null;
+  questionCount: 5 | 10 | 15;
+  winningRoadmapId: string | null;
+  winningTopic: string | null;
+  poolStatus: PoolStatus | null;
+  createdAt: number;
+  expiresAt: number | null;
+}
+
+export interface SubmitWagerResponse {
+  tier: 10 | 15 | 20;
+  xpAtProposal: number;
+  bothProposed: boolean;
+  appliedTier: 10 | 15 | 20 | null;
+  hostWagerAmount: number | null;
+  guestWagerAmount: number | null;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  userId: string;
+  name: string;
+  image: string | null;
+  netXp: number;
+  wins: number;
+  losses: number;
+}
+
+export interface LeaderboardResponse {
+  window: "week" | "all";
+  entries: LeaderboardEntry[];
+}
+
+/**
+ * BattleApiError carries a status code plus the server-sent error message
+ * (if any) so callers can map server errors to copy in UI-SPEC.
+ */
+export class BattleApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly serverMessage: string | null,
+    message: string,
+  ) {
+    super(message);
+    this.name = "BattleApiError";
+  }
+}
+
+async function readServerError(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { error?: string };
+    return body?.error ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Battle Fetchers ─────────────────────────────────────────────────────────
+
+/**
+ * Create a new battle as host.
+ */
+export async function createBattle(body: {
+  roadmapId: string;
+  questionCount: 5 | 10 | 15;
+}): Promise<BattleCreateResponse> {
+  const response = await fetch("/api/battle", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const msg = await readServerError(response);
+    throw new BattleApiError(
+      response.status,
+      msg,
+      `Failed to create battle: ${response.status}`,
+    );
+  }
+
+  return response.json() as Promise<BattleCreateResponse>;
+}
+
+/**
+ * Join an existing battle as guest via 6-char join code.
+ * Server returns 200 (pool hit) or 202 (pool generating). Both carry the
+ * BattleJoinResponse union — status field discriminates.
+ */
+export async function joinBattle(body: {
+  joinCode: string;
+  roadmapId: string;
+}): Promise<BattleJoinResponse> {
+  const response = await fetch("/api/battle/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+
+  // 200 and 202 both carry the union; anything else is an error.
+  if (!response.ok && response.status !== 202) {
+    const msg = await readServerError(response);
+    throw new BattleApiError(
+      response.status,
+      msg,
+      `Failed to join battle: ${response.status}`,
+    );
+  }
+
+  return response.json() as Promise<BattleJoinResponse>;
+}
+
+/**
+ * Fetch current battle lobby state. Used by the host's lobby poll loop
+ * and the join flow's pre-battle gate.
+ */
+export async function fetchBattleLobby(
+  battleId: string,
+): Promise<BattleLobbyState> {
+  const response = await fetch(
+    `/api/battle/${encodeURIComponent(battleId)}`,
+    { credentials: "include" },
+  );
+
+  if (!response.ok) {
+    const msg = await readServerError(response);
+    throw new BattleApiError(
+      response.status,
+      msg,
+      `Failed to fetch battle lobby: ${response.status}`,
+    );
+  }
+
+  return response.json() as Promise<BattleLobbyState>;
+}
+
+/**
+ * Propose a wager tier. Once BOTH participants propose, the server
+ * randomly selects one tier and returns { bothProposed: true, appliedTier, … }.
+ */
+export async function submitWager(
+  battleId: string,
+  tier: 10 | 15 | 20,
+): Promise<SubmitWagerResponse> {
+  const response = await fetch(
+    `/api/battle/${encodeURIComponent(battleId)}/wager`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ tier }),
+    },
+  );
+
+  if (!response.ok) {
+    const msg = await readServerError(response);
+    throw new BattleApiError(
+      response.status,
+      msg,
+      `Failed to submit wager: ${response.status}`,
+    );
+  }
+
+  return response.json() as Promise<SubmitWagerResponse>;
+}
+
+/**
+ * Host-only: transition battle from pre-battle to active (after both wagers
+ * have landed and the pre-battle reveals have played client-side).
+ */
+export async function startBattle(
+  battleId: string,
+): Promise<{ ok: true }> {
+  const response = await fetch(
+    `/api/battle/${encodeURIComponent(battleId)}/start`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    const msg = await readServerError(response);
+    throw new BattleApiError(
+      response.status,
+      msg,
+      `Failed to start battle: ${response.status}`,
+    );
+  }
+
+  return response.json() as Promise<{ ok: true }>;
+}
+
+/**
+ * Host-only: cancel a lobby before the guest joins. Transitions the battle
+ * to 'expired' status; no wager transfer (no wager committed yet).
+ */
+export async function cancelBattle(
+  battleId: string,
+): Promise<{ ok: true }> {
+  const response = await fetch(
+    `/api/battle/${encodeURIComponent(battleId)}/cancel`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    const msg = await readServerError(response);
+    throw new BattleApiError(
+      response.status,
+      msg,
+      `Failed to cancel battle: ${response.status}`,
+    );
+  }
+
+  return response.json() as Promise<{ ok: true }>;
+}
+
+/**
+ * Fetch top 50 leaderboard entries for the chosen time window (D-22, D-23).
+ */
+export async function fetchLeaderboard(
+  window: "week" | "all",
+): Promise<LeaderboardResponse> {
+  const response = await fetch(
+    `/api/battle/leaderboard?window=${encodeURIComponent(window)}`,
+    { credentials: "include" },
+  );
+
+  if (!response.ok) {
+    const msg = await readServerError(response);
+    throw new BattleApiError(
+      response.status,
+      msg,
+      `Failed to fetch leaderboard: ${response.status}`,
+    );
+  }
+
+  return response.json() as Promise<LeaderboardResponse>;
+}
+
+/**
+ * Build the WebSocket URL for a battle. Plan 07 consumes this from the
+ * useBattleSocket hook. Lives here so route files can feed it into the hook
+ * without importing WebSocket lifecycle code into the lib layer.
+ */
+export function buildBattleSocketUrl(battleId: string): string {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${window.location.host}/api/battle/${encodeURIComponent(battleId)}/ws`;
+}
