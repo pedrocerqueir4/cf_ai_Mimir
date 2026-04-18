@@ -13,6 +13,7 @@ import { chatRoutes } from "../../../worker/src/routes/chat";
 import { roadmapRoutes } from "../../../worker/src/routes/roadmaps";
 import { qaRoutes } from "../../../worker/src/routes/qa";
 import { gamificationRoutes } from "../../../worker/src/routes/gamification";
+import { battleRoutes } from "../../../worker/src/routes/battle";
 
 // Re-export Workflow entrypoint so Miniflare can find the named entrypoint
 export { ContentGenerationWorkflow } from "../../../worker/src/workflows/ContentGenerationWorkflow";
@@ -269,6 +270,7 @@ api.route("/api/chat", chatRoutes);
 api.route("/api/roadmaps", roadmapRoutes);
 api.route("/api/qa", qaRoutes);
 api.route("/api/user", gamificationRoutes);
+api.route("/api/battle", battleRoutes);
 
 // React Router for everything else
 const requestHandler = createRequestHandler(
