@@ -1041,14 +1041,32 @@ export class BattleRoom extends DurableObject<Env> {
             .insert(schema.battleAnswers)
             .values(row)
             .onConflictDoNothing();
-        } catch {
-          // Per-row FK / schema drift is non-fatal. ctx.storage remains the
-          // source of truth for battle state; Plan 08 will add the durable
-          // ledger writes that make this table authoritative.
+        } catch (err) {
+          // WR-07: per-row FK / schema drift is non-fatal for battle
+          // progression (ctx.storage is source of truth), BUT silent
+          // failure leaves `battle_answers` analytics unreliable and
+          // breaks the hard-refresh fallback path on the results route.
+          // Log structured context so drift is observable.
+          console.error(
+            "[BattleRoom persistAnswersToD1] row insert failed",
+            JSON.stringify({
+              battleId: config.battleId,
+              rowId: row.id,
+              userId: row.userId,
+              questionIndex: row.questionIndex,
+              err: String(err),
+            }),
+          );
         }
       }
-    } catch {
-      // Outer failure is also non-fatal — same reasoning as above.
+    } catch (err) {
+      // WR-07: outer failure (e.g. D1 binding unavailable) is also
+      // non-fatal to the DO, but MUST be logged so ops can investigate
+      // missing analytics or broken results fallbacks.
+      console.error(
+        "[BattleRoom persistAnswersToD1] batch failed",
+        JSON.stringify({ battleId: config.battleId, err: String(err) }),
+      );
     }
   }
 
