@@ -1,0 +1,115 @@
+import { useEffect } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "~/lib/utils";
+
+interface ReconnectOverlayProps {
+  /** Controls modal visibility. Caller derives from store phase. */
+  open: boolean;
+  /** Opponent name — empty string if unknown. Used in headings + toast. */
+  opponentName: string;
+  /** Remaining 30s grace window in milliseconds. Ticks down via parent. */
+  graceRemainingMs: number;
+  /**
+   * True when THE LOCAL USER is the one who dropped (we're trying to
+   * reconnect ourselves). False when the OPPONENT dropped (we're waiting
+   * on them).
+   */
+  isSelfDisconnect: boolean;
+}
+
+/**
+ * Full-screen shadcn Dialog during the 30s reconnect grace window
+ * (D-25 / UI-SPEC §Reconnect overlay).
+ *
+ * - Not dismissible: pointer-down-outside + escape-key + close-button
+ *   handlers all call preventDefault. The user literally cannot close
+ *   the modal — the battle is paused, they wait or leave via browser back.
+ * - Copy varies by `isSelfDisconnect`:
+ *   - own side: "Reconnecting…" / "Don't close this tab. We're restoring
+ *     the battle."
+ *   - opponent side: "{opponentName} disconnected" / "Waiting for them to
+ *     reconnect. The battle is paused."
+ * - Countdown: `{seconds}s before they forfeit` — Label 14 tabular-nums,
+ *   turns destructive at ≤ 10s (UI-SPEC).
+ * - Sonner toast fires on open for OPPONENT disconnects (second channel
+ *   in case the user is on another tab). Dismisses automatically when
+ *   the dialog closes.
+ *
+ * Uses the Radix `@radix-ui/react-dialog` primitives directly instead of
+ * the shadcn `DialogContent` wrapper — the shadcn wrapper has a built-in
+ * close (X) button we cannot disable from the outside.
+ */
+export function ReconnectOverlay({
+  open,
+  opponentName,
+  graceRemainingMs,
+  isSelfDisconnect,
+}: ReconnectOverlayProps) {
+  // Sonner toast lifecycle — only for opponent disconnects; self-side
+  // already has the full-screen dialog blocking the UI.
+  useEffect(() => {
+    if (!open || isSelfDisconnect) {
+      toast.dismiss("ws-disconnect");
+      return;
+    }
+    toast(`${opponentName} disconnected — paused.`, {
+      duration: Infinity,
+      id: "ws-disconnect",
+    });
+    return () => {
+      toast.dismiss("ws-disconnect");
+    };
+  }, [open, isSelfDisconnect, opponentName]);
+
+  const seconds = Math.max(0, Math.ceil(graceRemainingMs / 1_000));
+
+  return (
+    <DialogPrimitive.Root open={open}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Content
+          // All three escape hatches disabled — the user CANNOT dismiss.
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className={cn(
+            "fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-xs -translate-x-1/2 -translate-y-1/2",
+            "rounded-lg border bg-card p-6 shadow-lg",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+          )}
+        >
+          <div className="flex flex-col items-center gap-4 text-center">
+            <Loader2
+              className="h-10 w-10 animate-spin text-primary"
+              aria-hidden="true"
+            />
+            <DialogPrimitive.Title className="text-xl font-semibold leading-tight">
+              {isSelfDisconnect
+                ? "Reconnecting\u2026"
+                : `${opponentName || "Opponent"} disconnected`}
+            </DialogPrimitive.Title>
+            <DialogPrimitive.Description className="text-base text-muted-foreground">
+              {isSelfDisconnect
+                ? "Don\u2019t close this tab. We\u2019re restoring the battle."
+                : "Waiting for them to reconnect. The battle is paused."}
+            </DialogPrimitive.Description>
+            <p
+              className={cn(
+                "text-sm tabular-nums",
+                seconds <= 10
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+              )}
+              aria-live="polite"
+            >
+              {seconds}s before {isSelfDisconnect ? "you" : "they"} forfeit
+            </p>
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}
