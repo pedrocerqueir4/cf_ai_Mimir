@@ -48,6 +48,8 @@ created: 2026-04-16
 | 03-03-03 | 03 | 2 | GAME-06 | — | Dashboard shows streak from server | e2e | manual | — | ○ manual |
 | 03-04-01 | 04 | 3 | GAME-04 | — | Dashboard renders XP + streak components | file-check | `grep "XPProgressBar" apps/web/app/routes/_app._index.tsx` | ✅ | ✅ green |
 | 03-04-02 | 04 | 3 | GAME-06 | — | Profile page renders stat cards | file-check | `grep "StatCard" apps/web/app/routes/_app.profile.tsx` | ✅ | ✅ green |
+| 03-05-01 | 05 | 1 | GAME-01,02,05 | — | `<Toaster />` mounted so XP toasts render | file-check | `grep -cE 'Toaster' apps/web/app/root.tsx` → 2 | ✅ | ✅ green |
+| 03-05-02 | 05 | 1 | GAME-01,02 | — | Lesson-complete + quiz-correct toasts visible at runtime | e2e | manual | — | ○ manual |
 
 *Status: pending · green · red · flaky*
 
@@ -70,6 +72,7 @@ created: 2026-04-16
 | Dashboard shows XP, level, streak visually | GAME-04, GAME-06 | UI rendering verification | Open dashboard, verify XP bar, level badge, streak flame display correctly |
 | Level-up pulse animation triggers | GAME-03 | CSS animation timing | Complete enough activities to level up, verify subtle pulse on level badge |
 | Streak resets after missed day | GAME-05 | Requires time manipulation | Change system date or mock server time, verify streak resets to 0 |
+| XP toast visible on lesson complete / quiz correct | GAME-01, GAME-02, GAME-05 | sonner renders via portal at runtime; no test harness for third-party toast provider | Complete a lesson → expect `+25 XP earned` toast; answer quiz correctly → expect `+10 XP earned — Correct answer` toast. User-approved at UAT re-run 2026-04-17 after plan 03-05 commit `0557c75`. |
 
 ---
 
@@ -97,3 +100,21 @@ created: 2026-04-16
 Root cause: `createTestSession` in tests/setup.ts failed to extract auth cookie (Better Auth returned 403 for unverified email). Fixed by inserting pre-verified user + HMAC-signed session directly into D1. Also rewrote gamification.test.ts to use `app.request()` with mounted routes instead of `WORKER.fetch()`.
 
 Result: 36/36 tests pass (29 xp.test.ts + 7 gamification.test.ts).
+
+---
+
+## Validation Audit 2026-04-17
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Trigger: Plan 03-05 added (gap-closure — mount sonner `<Toaster />` in `root.tsx`, +2 LOC). No new backend logic, no new requirements, no new server surface area.
+
+Re-run: `npx vitest run tests/xp.test.ts tests/gamification.test.ts --reporter=dot` → **36/36 passed (2 files, 184ms)** — no regression from the UI-only change.
+
+New row added to Per-Task Verification Map (03-05-01) marked as **manual-only** (visual toast behavior, user-approved at UAT checkpoint). Consistent with the plan's explicit "no automated tests for sonner" directive: third-party library behavior is out of scope; the gap was structural (missing mount), not behavioral.
+
+`nyquist_compliant: true` remains valid — all requirements (GAME-01..06) continue to have automated verification at the business-logic layer. Toast rendering is a UI concern covered by manual verification per the Nyquist policy for visual-only behaviors.

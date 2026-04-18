@@ -12,15 +12,15 @@ Mimir is built in four phases, each delivering a complete, independently verifia
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Project scaffold, auth, database schema, and security contracts
-- [ ] **Phase 2: AI Content Pipeline** - Roadmap generation, lesson delivery, and RAG Q&A
-- [ ] **Phase 2.1: Cross-Phase Integration Fixes** - Rate limiting, Q&A citations, sanitize middleware, type alignment (INSERTED)
-- [ ] **Phase 3: Gamification** - XP system, levels, daily streaks, and stats dashboard
-- [ ] **Phase 4: Multiplayer Battles** - Real-time head-to-head quiz battles with server-authoritative scoring
+- [ ] **Phase 01: Foundation** - Project scaffold, auth, database schema, and security contracts
+- [ ] **Phase 02: AI Content Pipeline** - Roadmap generation, lesson delivery, and RAG Q&A
+- [ ] **Phase 02.1: Cross-Phase Integration Fixes** - Rate limiting, Q&A citations, sanitize middleware, type alignment (INSERTED)
+- [ ] **Phase 03: Gamification** - XP system, levels, daily streaks, and stats dashboard
+- [ ] **Phase 04: Multiplayer Battles** - Real-time head-to-head quiz battles with server-authoritative scoring
 
 ## Phase Details
 
-### Phase 1: Foundation
+### Phase 01: Foundation
 **Goal**: Users can securely create accounts, sign in, and have their identity and progress anchored in the system — with all security contracts established for every phase that follows
 **Depends on**: Nothing (first phase)
 **Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, SEC-01, SEC-02, SEC-03, SEC-04, UX-03, UX-04
@@ -41,7 +41,7 @@ Plans:
 
 **UI hint**: yes
 
-### Phase 2: AI Content Pipeline
+### Phase 02: AI Content Pipeline
 **Goal**: Users can describe any topic and receive a structured, adaptive learning roadmap with bite-sized lessons and quizzes — and ask AI questions about their own content at any time
 **Depends on**: Phase 1
 **Requirements**: CONT-01, CONT-02, CONT-03, CONT-04, CONT-05, CONT-06, QNA-01, QNA-02, QNA-03, QNA-04, UX-01, UX-02
@@ -68,7 +68,7 @@ Plans:
 
 **UI hint**: yes
 
-### Phase 2.1: Cross-Phase Integration Fixes (INSERTED)
+### Phase 02.1: Cross-Phase Integration Fixes (INSERTED)
 **Goal**: Fix security and data wiring gaps discovered during milestone audit — restore rate limiting on auth endpoints, fix Q&A citation rendering, apply global input sanitization, and align TypeScript types with actual API responses
 **Depends on**: Phase 2
 **Requirements**: QNA-04, SEC-01, SEC-02
@@ -84,7 +84,7 @@ Plans:
 - [x] 02.1-01-PLAN.md — Security middleware wiring: rate limiting + global sanitize in app.ts
 - [x] 02.1-02-PLAN.md — Data alignment: Q/A citation fix, AuthVariables generic, api-client.ts types
 
-### Phase 3: Gamification
+### Phase 03: Gamification
 **Goal**: Users earn XP and build daily learning habits through a transparent reward loop with levels, streaks, and a stats dashboard that makes progress feel real and competitive
 **Depends on**: Phase 2
 **Requirements**: GAME-01, GAME-02, GAME-03, GAME-04, GAME-05, GAME-06
@@ -93,7 +93,7 @@ Plans:
   2. User can see their current XP total, level, and a progress bar showing how much XP remains until the next level-up
   3. User's streak counter increments on the dashboard for each consecutive day they complete at least one lesson, and resets to zero if they miss a day
   4. User can view a leaderboard showing ranked scores for the current period
-**Plans**: 5 plans
+**Plans**: 6 plans
 
 Plans:
 - [x] 03-00-PLAN.md — Wave 0: test stubs for xp.test.ts and gamification.test.ts, setup.ts user_stats table
@@ -101,10 +101,11 @@ Plans:
 - [x] 03-02-PLAN.md — Gamification UI components (XPProgressBar, StreakCounter, StatCard, LevelBadge) + api-client types
 - [x] 03-03-PLAN.md — XP award logic in lesson/quiz endpoints, frontend toasts, schema push
 - [x] 03-04-PLAN.md — Dashboard (home page replacement) + Profile page with stats grid
+- [x] 03-05-PLAN.md — Gap closure: mount sonner Toaster in root.tsx so XP toasts render (UAT Test 2 fix)
 
 **UI hint**: yes
 
-### Phase 4: Multiplayer Battles
+### Phase 04: Multiplayer Battles
 **Goal**: Users can challenge another player to a real-time head-to-head quiz battle on a topic they have studied, with server-authoritative scoring that cannot be manipulated
 **Depends on**: Phase 3
 **Requirements**: MULT-01, MULT-02, MULT-03, MULT-04, MULT-05, SEC-05, SEC-06
@@ -114,17 +115,28 @@ Plans:
   3. Speed-weighted scoring is calculated server-side: faster correct answers yield higher points and the client cannot alter the score
   4. User can wager XP before a battle (capped at 10-20% of their current XP) and the winner's XP balance updates after the battle ends
   5. If a WebSocket connection drops mid-battle, the client reconnects and the game state is restored from the server without corrupting scores
-**Plans**: TBD
+**Plans**: 9 plans
+
+Plans:
+- [x] 04-00-PLAN.md — Wave 0: wrangler bindings (DO + Workflow + battle rate limits), BattleRoom + BattleQuestionGenerationWorkflow skeletons, 31 it.todo stub map
+- [x] 04-01-PLAN.md — D1 schema (6 battle tables + partial UNIQUE index), pure utilities (join-code, battle-scoring, Zod strict inbound schemas), drizzle-kit push
+- [x] 04-02-PLAN.md — BattleRoom DO core: Hibernation accept, alarms, scoring critical section, multi-tab eviction, sudden-death, idle forfeit
+- [x] 04-03-PLAN.md — BattleQuestionGenerationWorkflow + battle-pool service (Vectorize topic similarity + race-deduped pool population)
+- [x] 04-04-PLAN.md — HTTP routes: /api/battle create/join/wager/start/cancel/:id/leaderboard + websocketAuthGuard + battle rate-limit extensions
+- [x] 04-05-PLAN.md — Frontend landing: /battle tabs (Create/Join/Leaderboard), Create flow, Join flow, Lobby, shared pickers, shadcn dialog/alert-dialog
+- [x] 04-06-PLAN.md — Pre-battle reveals: SlotMachineReel (framer-motion), RoadmapRevealScreen, WagerRevealScreen, canvas-confetti, reduced-motion path
+- [x] 04-07-PLAN.md — Battle room + Results: Zustand store, useBattleSocket hook, BattleTimer/ScoreCard/ConnectionDot/BattleQuestion/ReconnectOverlay, results screen
+- [x] 04-08-PLAN.md — Atomic XP transfer (env.DB.batch) + idempotent ledger + disconnect/reconnect/timer-pause/forfeit DO logic
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 2.1 -> 3 -> 4
+Phases execute in numeric order: 01 -> 02 -> 02.1 -> 03 -> 04
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 4/5 | In Progress|  |
-| 2. AI Content Pipeline | 10/11 | In Progress|  |
-| 2.1 Integration Fixes | 0/2 | Not started | - |
-| 3. Gamification | 0/5 | Not started | - |
-| 4. Multiplayer Battles | 0/TBD | Not started | - |
+| 01. Foundation | 4/5 | In Progress|  |
+| 02. AI Content Pipeline | 10/11 | In Progress|  |
+| 02.1 Integration Fixes | 0/2 | Not started | - |
+| 03. Gamification | 0/5 | Not started | - |
+| 04. Multiplayer Battles | 8/9 | In Progress|  |

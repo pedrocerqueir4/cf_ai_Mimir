@@ -39,8 +39,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **MULT-01**: User can initiate a real-time quiz battle on a topic they've studied
 - [ ] **MULT-02**: Two players compete head-to-head answering the same questions simultaneously
 - [ ] **MULT-03**: Battle scoring is speed-weighted — faster correct answers earn more points
-- [ ] **MULT-04**: User can wager XP before a battle, winner takes the pot (capped at 10-20% of current XP)
-- [ ] **MULT-05**: Battle state is server-authoritative — no client-side score manipulation
+- [x] **MULT-04**: User can wager XP before a battle, winner takes the pot (capped at 10-20% of current XP)
+- [x] **MULT-05**: Battle state is server-authoritative — no client-side score manipulation
 
 ### AI Q&A
 
@@ -62,8 +62,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **SEC-02**: Authentication is hardened with rate limiting and brute-force protection
 - [x] **SEC-03**: Strict data isolation — users can never access another user's content or progress (no IDOR)
 - [x] **SEC-04**: SSRF prevention on all server-side requests
-- [ ] **SEC-05**: Race condition protection on multiplayer scoring and XP updates (atomic operations)
-- [ ] **SEC-06**: All scoring and XP awards are server-authoritative
+- [x] **SEC-05**: Race condition protection on multiplayer scoring and XP updates (atomic operations)
+- [x] **SEC-06**: All scoring and XP awards are server-authoritative
 
 ## v2 Requirements
 
@@ -146,10 +146,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MULT-01 | Phase 4 | Pending |
 | MULT-02 | Phase 4 | Pending |
 | MULT-03 | Phase 4 | Pending |
-| MULT-04 | Phase 4 | Pending |
-| MULT-05 | Phase 4 | Pending |
-| SEC-05 | Phase 4 | Pending |
-| SEC-06 | Phase 4 | Pending |
+| MULT-04 | Phase 4 | Complete |
+| MULT-05 | Phase 4 | Complete |
+| SEC-05 | Phase 4 | Complete |
+| SEC-06 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 37 total

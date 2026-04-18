@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 UI-SPEC approved
-last_updated: "2026-04-16T17:25:29.579Z"
-last_activity: 2026-04-16 -- Phase 03 execution started
+stopped_at: Phase 4 Plan 04-08 complete — all 9 plans landed
+last_updated: "2026-04-18T16:19:02.612Z"
+last_activity: 2026-04-18
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 23
-  completed_plans: 17
-  percent: 74
+  completed_phases: 4
+  total_plans: 33
+  completed_plans: 32
+  percent: 97
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Users describe a topic and instantly get an adaptive learning roadmap with bite-sized lessons and quizzes that make learning addictive
-**Current focus:** Phase 03 — Gamification
+**Current focus:** Phase 04 — Multiplayer Battles
 
 ## Current Position
 
-Phase: 03 (Gamification) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 03
-Last activity: 2026-04-16 -- Phase 03 execution started
+Phase: 04 (Multiplayer Battles) — EXECUTING
+Plan: 3 of 9
+Status: Ready to execute
+Last activity: 2026-04-18
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -65,6 +65,8 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-ai-content-pipeline P05 | 2min | 2 tasks | 4 files |
 | Phase 02-ai-content-pipeline P06 | 3min | 2 tasks | 4 files |
 | Phase 02-ai-content-pipeline P07 | 3min | 2 tasks | 4 files |
+| Phase 4 P7 | ~75min | 3 tasks | 10 files |
+| Phase 04-multiplayer-battles P08 | ~60min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -113,6 +115,11 @@ Recent decisions affecting current work:
 - [Phase 02-ai-content-pipeline]: Ask AI button stub: toast('Coming soon') — Plan 07 replaces with in-lesson Q&A bottom sheet; button presence required by plan spec
 - [Phase 02-ai-content-pipeline]: QAResponse uses citations (not sources) array with lessonId/lessonTitle/lessonOrder — matched actual api-client.ts interface
 - [Phase 02-ai-content-pipeline]: Citation navigation: onCitationClick callback closes sheet first then navigate after 160ms — prevents sheet flash during route change
+- [Phase 4]: Plan 07 uses cross-bundle import of BattleOutboundSchema (worker/src/validation/battle-schemas.ts) rather than duplicating Zod shapes on the frontend — apps/web/tsconfig.cloudflare.json already includes worker/src in its type-check scope.
+- [Phase 4]: Plan 07 ReconnectOverlay uses Radix Dialog primitives directly (not shadcn DialogContent wrapper) — the wrapper hard-codes an X close button that cannot be removed; the overlay must be strictly non-dismissible per UI-SPEC.
+- [Phase 04-multiplayer-battles]: Plan 08: Raw D1PreparedStatement (not Drizzle db.batch) for env.DB.batch() in endBattle — matches RESEARCH.md Pattern 5 example, less sensitive to Drizzle version changes
+- [Phase 04-multiplayer-battles]: Plan 08: Ledger row existence SELECT pre-batch + INSERT OR IGNORE on battle_ledger.battle_id primary key — double-layered idempotency against alarm race + re-invocation
+- [Phase 04-multiplayer-battles]: Plan 08: DisconnectRecord bucket (separate from runtime) stores userId/disconnectedAtMs/pausedQuestionRemainingMs/preDisconnectPhase — enables transactional updates in webSocketClose and handleHello without round-tripping whole runtime state
 
 ### Pending Todos
 
@@ -126,6 +133,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T16:44:47.871Z
-Stopped at: Phase 3 UI-SPEC approved
-Resume file: .planning/phases/03-gamification/03-UI-SPEC.md
+Last session: 2026-04-18T16:18:52.985Z
+Stopped at: Phase 4 Plan 04-08 complete — all 9 plans landed
+Resume file: .planning/phases/04-multiplayer-battles/04-08-SUMMARY.md
