@@ -424,12 +424,38 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
     typedGuestRoadmap ?? { id: null, topic: presetTopicSafe! };
   const winningRoadmap = winnerIsHost ? hostRoadmapRow : guestSideRoadmap;
 
-  // Update battles row with guest + coin-flip result. Status transitions to
-  // 'pre-battle' regardless of pool state — the pre-battle phase spans both
-  // lobby-closed and questions-loading states. On a preset-topic join the
-  // guest has no roadmap of their own; `guestRoadmapId` and (if preset won
-  // the flip) `winningRoadmapId` both stay null — `winningTopic` alone
-  // drives the downstream pool lookup.
+  // ─── Pool lookup FIRST (gap 04-09) ───────────────────────────────────
+  // Runs BEFORE any D1 mutation and BEFORE DO attachGuest. If the Workers
+  // AI embedding or Vectorize call throws (e.g., InferenceUpstreamError
+  // 1031), nothing has been mutated: the battle row stays 'lobby', the DO
+  // lobby alarm stays armed, and the join code remains valid for retry.
+  // The guest receives a structured 503.
+  let lookup: Awaited<ReturnType<typeof findOrQueueTopic>>;
+  try {
+    lookup = await findOrQueueTopic(c.env, winningRoadmap.topic, {
+      count: battle.questionCount as 5 | 10 | 15,
+      reserveCount: 5,
+      seed: battle.id,
+    });
+  } catch (err) {
+    console.error("[battle join] findOrQueueTopic failed:", String(err));
+    return c.json(
+      {
+        error: "AI service temporarily unavailable. Please try again.",
+        code: "AI_UPSTREAM_TEMPORARY" as const,
+      },
+      503,
+    );
+  }
+
+  // ─── Single atomic D1 mutation (pool lookup succeeded) ───────────────
+  // Collapses the previous two-step UPDATE (guest/status THEN poolTopicId)
+  // into ONE statement committing guest attachment + coin-flip result +
+  // poolTopicId together. Status transitions to 'pre-battle' — the
+  // pre-battle phase spans both lobby-closed and questions-loading states.
+  // On a preset-topic join the guest has no roadmap of their own;
+  // `guestRoadmapId` and (if preset won the flip) `winningRoadmapId` both
+  // stay null — `winningTopic` alone drives the downstream pool lookup.
   await db
     .update(schema.battles)
     .set({
@@ -438,11 +464,14 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
       winningRoadmapId: winningRoadmap.id ?? null,
       winningTopic: winningRoadmap.topic,
       status: "pre-battle",
+      poolTopicId: lookup.poolTopicId,
     })
     .where(eq(schema.battles.id, battle.id));
 
-  // Notify the DO — attachGuest cancels the lobby alarm + advances to
-  // pre-battle phase.
+  // ─── DO attachGuest (now safe — pool + D1 both committed) ────────────
+  // Cancels the lobby alarm + advances to pre-battle phase. If this fails
+  // the D1 state is already committed; the host will time out via the
+  // BattleRoom DO's lifecycle, not via the 5-min lobby alarm.
   try {
     const id = c.env.BATTLE_ROOM.idFromName(battle.id);
     const stub = c.env.BATTLE_ROOM.get(id);
@@ -459,26 +488,6 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
   } catch (err) {
     console.error("[battle join] DO attachGuest failed:", String(err));
   }
-
-  // Pool lookup — hit returns sampled questions for immediate ready; miss
-  // triggers a Workflow and returns 202 generating.
-  let lookup: Awaited<ReturnType<typeof findOrQueueTopic>>;
-  try {
-    lookup = await findOrQueueTopic(c.env, winningRoadmap.topic, {
-      count: battle.questionCount as 5 | 10 | 15,
-      reserveCount: 5,
-      seed: battle.id,
-    });
-  } catch (err) {
-    console.error("[battle join] findOrQueueTopic failed:", String(err));
-    return c.json({ error: "Failed to warm question pool" }, 500);
-  }
-
-  // Persist poolTopicId on the battles row so Plan 08 / Plan 05-07 can poll.
-  await db
-    .update(schema.battles)
-    .set({ poolTopicId: lookup.poolTopicId })
-    .where(eq(schema.battles.id, battle.id));
 
   if (lookup.status === "hit") {
     // Pool is ready — forward the sampled questions to the DO for broadcast
