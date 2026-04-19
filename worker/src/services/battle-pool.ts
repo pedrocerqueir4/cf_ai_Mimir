@@ -179,12 +179,49 @@ export async function sampleQuestions(
   };
 }
 
+// ─── Retry helper ────────────────────────────────────────────────────────────
+
+/**
+ * Run `fn`, and if it throws, retry once after a jittered backoff delay.
+ *
+ * Purpose (gap 04-09): absorb transient Workers AI / Vectorize upstream
+ * errors (e.g., InferenceUpstreamError 1031) so a single hiccup does not
+ * strand a battle join. A second failure re-throws the LAST error unchanged
+ * so the caller's existing error-handling path runs.
+ *
+ * Defaults: 1 retry (2 attempts total), 200-400ms random backoff between
+ * attempts. Bounded so the overall join request stays well under HTTP
+ * client-side timeouts even on a second failure.
+ */
+async function retryWithJitter<T>(
+  fn: () => Promise<T>,
+  opts: { retries?: number; minMs?: number; maxMs?: number } = {},
+): Promise<T> {
+  const retries = opts.retries ?? 1;
+  const minMs = opts.minMs ?? 200;
+  const maxMs = opts.maxMs ?? 400;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt === retries) break;
+      const delay = Math.floor(minMs + Math.random() * Math.max(1, maxMs - minMs));
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw lastErr;
+}
+
 // ─── Vectorize helpers ───────────────────────────────────────────────────────
 
 async function embedTopic(env: Env, normalized: string): Promise<number[]> {
-  const resp = (await (env.AI.run as any)(EMBEDDING_MODEL, {
-    text: [normalized],
-  })) as { data: number[][] };
+  const resp = (await retryWithJitter(() =>
+    (env.AI.run as any)(EMBEDDING_MODEL, {
+      text: [normalized],
+    }),
+  )) as { data: number[][] };
   const embedding = resp?.data?.[0];
   if (!embedding || embedding.length === 0) {
     throw new Error("Failed to generate topic embedding");
@@ -222,12 +259,17 @@ export async function findOrQueueTopic(
   // Embed topic.
   const topicEmbedding = await embedTopic(env, normalized);
 
-  // Vectorize lookup in the battle-topics namespace.
-  const queryResult = (await (env.VECTORIZE as any).query(topicEmbedding, {
-    topK: 1,
-    returnMetadata: "all",
-    namespace: BATTLE_TOPICS_NAMESPACE,
-  })) as {
+  // Vectorize lookup in the battle-topics namespace. Wrapped in
+  // retryWithJitter (gap 04-09) so a transient upstream failure does not
+  // immediately surface as a user-facing 503; a single retry after a short
+  // jittered backoff absorbs the vast majority of one-off flakes.
+  const queryResult = (await retryWithJitter(() =>
+    (env.VECTORIZE as any).query(topicEmbedding, {
+      topK: 1,
+      returnMetadata: "all",
+      namespace: BATTLE_TOPICS_NAMESPACE,
+    }),
+  )) as {
     matches?: Array<{
       id: string;
       score: number;
