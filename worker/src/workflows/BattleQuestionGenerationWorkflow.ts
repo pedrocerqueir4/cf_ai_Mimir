@@ -214,8 +214,13 @@ export class BattleQuestionGenerationWorkflow extends WorkflowEntrypoint<
         "generate-battle-questions",
         {
           retries: {
-            limit: 3,
-            delay: "15 seconds",
+            // Gap 04-10: tightened from {limit:3, delay:"15 seconds"} (~105s total)
+            // to {limit:2, delay:"3 seconds"} (~9s total) so the outer catch block
+            // writes poolStatus='failed' within wall-clock seconds on persistent
+            // Workers AI network drops ("Network connection lost"). Frontend
+            // stuck-pane timeout is 45s — 5x headroom over the new 9s budget.
+            limit: 2,
+            delay: "3 seconds",
             backoff: "exponential",
           },
         },
