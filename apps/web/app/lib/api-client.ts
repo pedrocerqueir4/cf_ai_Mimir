@@ -412,10 +412,22 @@ export interface BattleLobbyState {
   status: BattleStatus;
   hostId: string;
   hostName: string;
+  /** Plan 04-11: participant identity surface for lobby ParticipantCard. */
+  hostImage: string | null;
+  /** Plan 04-11: host's total XP at lobby-read time. */
+  hostXp: number;
+  /** Plan 04-11: host's level (derived from XP server-side). */
+  hostLevel: number;
   hostRoadmapTitle: string;
   hostWagerTier: 10 | 15 | 20 | null;
   guestId: string | null;
   guestName: string | null;
+  /** Plan 04-11: guest's avatar (null when guest not yet joined or no image). */
+  guestImage: string | null;
+  /** Plan 04-11: guest's total XP; null when guest not yet joined. */
+  guestXp: number | null;
+  /** Plan 04-11: guest's level; null when guest not yet joined. */
+  guestLevel: number | null;
   guestRoadmapTitle: string | null;
   guestWagerTier: 10 | 15 | 20 | null;
   /** Server's coin-flip-applied tier once BOTH players have proposed. Null until then. */

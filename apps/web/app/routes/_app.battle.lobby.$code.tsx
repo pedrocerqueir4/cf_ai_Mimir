@@ -29,6 +29,8 @@ import {
   type BattleLobbyState,
 } from "~/lib/api-client";
 import { cn } from "~/lib/utils";
+import { useSession } from "~/lib/auth-client";
+import { ParticipantCard } from "~/components/battle/ParticipantCard";
 
 interface LobbyLocationState {
   battleId?: string;
@@ -84,6 +86,10 @@ function LobbyInner({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Plan 04-11, Task 4: need current user id so ParticipantCard can flag
+  // the "(you)" marker on the right slot.
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id ?? null;
 
   useEffect(() => {
     setShowShare(
@@ -283,17 +289,39 @@ function LobbyInner({
         )}
       </div>
 
-      {/* Opponent slot + countdown */}
-      <div className="mt-8 flex flex-col gap-2" aria-live="polite">
-        <p className="text-base leading-snug">
-          Opponent:{" "}
-          <span className="text-muted-foreground">
-            {lobby?.guestName ?? "Waiting…"}
-          </span>
-        </p>
+      {/* Plan 04-11, Task 4: Participants (host + guest) as ParticipantCard
+          tiles. Guest slot is a waiting placeholder until the guest joins
+          and the lobby-poll response carries guestName/guestLevel/guestXp. */}
+      <div className="mt-8 flex flex-col gap-3" aria-live="polite">
+        {lobby && (
+          <ParticipantCard
+            name={lobby.hostName || "Host"}
+            image={lobby.hostImage ?? null}
+            level={lobby.hostLevel ?? 1}
+            xp={lobby.hostXp ?? 0}
+            role="host"
+            isSelf={currentUserId != null && lobby.hostId === currentUserId}
+          />
+        )}
+        {lobby && lobby.guestId ? (
+          <ParticipantCard
+            name={lobby.guestName ?? "Guest"}
+            image={lobby.guestImage ?? null}
+            level={lobby.guestLevel ?? 1}
+            xp={lobby.guestXp ?? 0}
+            role="guest"
+            isSelf={currentUserId != null && lobby.guestId === currentUserId}
+          />
+        ) : (
+          <div className="flex items-center justify-center rounded-lg border border-dashed border-border p-4">
+            <p className="text-sm text-muted-foreground">
+              Waiting for opponent to join&hellip;
+            </p>
+          </div>
+        )}
         <p
           className={cn(
-            "text-sm leading-snug tabular-nums",
+            "mt-1 text-sm leading-snug tabular-nums",
             countdownIsDestructive
               ? "text-destructive"
               : "text-muted-foreground",
@@ -303,7 +331,7 @@ function LobbyInner({
         </p>
         {errorMsg && (
           <p role="alert" className="text-sm text-muted-foreground">
-            Couldn&apos;t refresh lobby state. Retrying…
+            Couldn&apos;t refresh lobby state. Retrying&hellip;
           </p>
         )}
       </div>
