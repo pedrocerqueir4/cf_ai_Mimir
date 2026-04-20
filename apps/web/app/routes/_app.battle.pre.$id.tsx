@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Navigate,
   useLocation,
@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react";
 import { useSession } from "~/lib/auth-client";
 import {
   BattleApiError,
+  cancelBattle,
   fetchBattleLobby,
   startBattle,
   submitWager,
@@ -41,11 +42,20 @@ type Phase =
   | "wager-reveal"
   | "countdown"
   | "starting"
+  | "stuck"
   | "error";
 
 const POLL_INTERVAL_MS = 2_000;
 const COUNTDOWN_SECONDS = 3;
 const COUNTDOWN_TICK_MS = 1_000;
+/**
+ * How long we let poolStatus stay 'generating' in the 'loading' phase before
+ * we surface a user-visible "stuck" recovery pane. Gap 04-10: bounded UX for
+ * BattleQuestionGenerationWorkflow failures that don't flip to
+ * poolStatus='failed' promptly (e.g., transient Workers AI outage still
+ * retrying — we give ~5x headroom over the tightened ~9s workflow budget).
+ */
+const POOL_STUCK_THRESHOLD_MS = 45_000;
 
 export default function BattlePrePage() {
   const { id: routeBattleId } = useParams<{ id: string }>();
@@ -87,10 +97,16 @@ function BattlePreInner({
   const [selectedTier, setSelectedTier] = useState<WagerTier>(15);
   const [submittingWager, setSubmittingWager] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Gap 04-10: track when 'loading' phase first observed poolStatus='generating'
+  // so we can transition to 'stuck' after 45s of no progress. useRef (not
+  // useState) because a wall-clock reference must not trigger re-renders.
+  const loadingStartedAtRef = useRef<number | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   // Controls whether TanStack Query keeps polling. Stops the instant we
   // transition into a reveal so the lobby doesn't keep hitting the API
-  // while the animations play.
+  // while the animations play. Also stops in 'stuck' — no point burning
+  // API calls once we've surfaced the stuck-pane (T-04-gap-06 mitigation).
   const pollActive = phase === "loading" ||
     phase === "wager-propose" ||
     phase === "waiting-for-opponent";
@@ -208,6 +224,32 @@ function BattlePreInner({
     setPhase("waiting-for-opponent");
   }, [lobby, currentUserId, phase]);
 
+  // ─── Gap 04-10: pool-generating elapsed-time watchdog ────────────────
+  // If poolStatus stays 'generating' for > 45s while we're still in
+  // 'loading', surface the stuck-pane. 'waiting-for-opponent' and
+  // 'wager-propose' are NOT subject to this timer — the user has control
+  // of the UI in those phases. Pairs with Task 1's tightened workflow
+  // retries (~9s) to bound the silent-spinner window at the UX layer
+  // even if the workflow somehow hasn't flipped poolStatus='failed'.
+  useEffect(() => {
+    if (phase !== "loading") {
+      loadingStartedAtRef.current = null;
+      return;
+    }
+    if (!lobby || lobby.poolStatus !== "generating") {
+      loadingStartedAtRef.current = null;
+      return;
+    }
+    if (loadingStartedAtRef.current === null) {
+      loadingStartedAtRef.current = Date.now();
+      return;
+    }
+    const elapsed = Date.now() - loadingStartedAtRef.current;
+    if (elapsed > POOL_STUCK_THRESHOLD_MS) {
+      setPhase("stuck");
+    }
+  }, [lobby, phase]);
+
   // ─── Wager submission ────────────────────────────────────────────────
   const handleSubmitWager = useCallback(async () => {
     setSubmittingWager(true);
@@ -255,6 +297,31 @@ function BattlePreInner({
       setSubmittingWager(false);
     }
   }, [battleId, selectedTier, queryClient, currentUserId]);
+
+  // ─── Gap 04-10: stuck-pane CTAs ─────────────────────────────────────
+  const handleCancelStuck = useCallback(async () => {
+    if (cancelling) return;
+    setCancelling(true);
+    try {
+      // Best-effort: host cancel flips battles.status='expired'. Guest
+      // will 403 (host-only endpoint) — that's fine, the navigation is
+      // the primary outcome. Battle auto-expires on the lobby alarm or
+      // stays orphaned; the orphaned-row tech-debt note from 04-09 still
+      // applies.
+      await cancelBattle(battleId);
+    } catch {
+      // Intentional swallow — navigation is the primary outcome.
+    } finally {
+      navigate("/battle", { replace: true });
+    }
+  }, [battleId, cancelling, navigate]);
+
+  const handleKeepWaiting = useCallback(() => {
+    // Reset the elapsed-time ref so the 45s window restarts, then drop
+    // back to 'loading'. Polling resumes (pollActive re-derives true).
+    loadingStartedAtRef.current = Date.now();
+    setPhase("loading");
+  }, []);
 
   // ─── Reveal-sequence handlers ────────────────────────────────────────
   const handleRoadmapRevealComplete = useCallback(() => {
@@ -312,6 +379,16 @@ function BattlePreInner({
   }, [lobby, currentUserId]);
 
   // ─── Render ──────────────────────────────────────────────────────────
+  if (phase === "stuck") {
+    return (
+      <StuckPane
+        cancelling={cancelling}
+        onCancel={handleCancelStuck}
+        onKeepWaiting={handleKeepWaiting}
+      />
+    );
+  }
+
   if (phase === "error") {
     return (
       <ErrorPane
@@ -508,6 +585,54 @@ function ErrorPane({
         <Button onClick={onBack} className="w-full" size="lg">
           Back to battle
         </Button>
+      </div>
+    </div>
+  );
+}
+
+// Gap 04-10: surfaced when poolStatus has been 'generating' for > 45s in
+// the 'loading' phase. Distinct from ErrorPane — this is a RECOVERABLE UX
+// state (user can wait longer or bail) whereas 'error' is terminal.
+function StuckPane({
+  cancelling,
+  onCancel,
+  onKeepWaiting,
+}: {
+  cancelling: boolean;
+  onCancel: () => void;
+  onKeepWaiting: () => void;
+}) {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-8">
+      <div className="w-full max-w-md text-center">
+        <h1 className="mb-2 text-xl font-semibold leading-tight">
+          Taking longer than expected
+        </h1>
+        <p className="mb-6 text-base text-muted-foreground">
+          The AI is taking longer than usual to prepare your questions. This
+          may be a temporary outage &mdash; you can cancel and try again, or
+          keep waiting.
+        </p>
+        <div className="flex flex-col gap-3">
+          <Button
+            onClick={onCancel}
+            className="w-full"
+            size="lg"
+            disabled={cancelling}
+            variant="destructive"
+          >
+            {cancelling ? "Cancelling\u2026" : "Cancel and try again"}
+          </Button>
+          <Button
+            onClick={onKeepWaiting}
+            className="w-full"
+            size="lg"
+            variant="outline"
+            disabled={cancelling}
+          >
+            Keep waiting
+          </Button>
+        </div>
       </div>
     </div>
   );
