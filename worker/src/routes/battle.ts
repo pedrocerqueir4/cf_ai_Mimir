@@ -39,6 +39,7 @@ import { generateUniqueCode } from "../lib/join-code";
 import { computeWagerAmount, type WagerTier } from "../lib/battle-scoring";
 import { findOrQueueTopic, sampleQuestions } from "../services/battle-pool";
 import { assertTopicSafe } from "../validation/battle-prompts";
+import { computeLevel } from "../lib/xp";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -741,21 +742,40 @@ battleRoutes.get("/:id", async (c) => {
     return c.text("Forbidden", 403);
   }
 
-  // Fetch host + guest user info (name).
+  // Fetch host + guest user info (name, image) plus their user_stats XP so
+  // the lobby can surface name/image/level/XP per participant (Plan 04-11,
+  // Task 3 — feeds the ParticipantCard in the lobby UI). LEFT JOIN against
+  // user_stats because a freshly-created user row may not yet have a stats
+  // row (defaults to xp: 0, level: 1 below).
   const userIds = [battle.hostId];
   if (battle.guestId) userIds.push(battle.guestId);
   const userRows = await db
     .select({
       id: schema.users.id,
       name: schema.users.name,
+      image: schema.users.image,
+      xp: schema.userStats.xp,
     })
     .from(schema.users)
+    .leftJoin(
+      schema.userStats,
+      eq(schema.userStats.userId, schema.users.id),
+    )
     .where(
       userIds.length === 2
         ? sql`${schema.users.id} IN (${userIds[0]}, ${userIds[1]})`
         : eq(schema.users.id, userIds[0]),
     );
-  const userMap = new Map(userRows.map((u) => [u.id, u.name]));
+  const userMap = new Map<
+    string,
+    { name: string; image: string | null; xp: number; level: number }
+  >(
+    userRows.map((u) => {
+      const xp = u.xp ?? 0;
+      const level = computeLevel(xp).level;
+      return [u.id, { name: u.name, image: u.image ?? null, xp, level }];
+    }),
+  );
 
   // Fetch roadmap titles.
   const roadmapIds = [battle.hostRoadmapId];
@@ -790,16 +810,29 @@ battleRoutes.get("/:id", async (c) => {
   const expiresAt =
     battle.status === "lobby" ? createdAtMs + LOBBY_EXPIRY_MS : null;
 
+  // Plan 04-11, Task 3: surface name/image/level/XP per participant so the
+  // lobby ParticipantCard can render rich identity tiles. Defaults when
+  // user_stats row is absent: xp: 0, level: 1 (already applied in userMap
+  // construction above).
+  const hostInfo = userMap.get(battle.hostId);
+  const guestInfo = battle.guestId ? userMap.get(battle.guestId) : undefined;
+
   return c.json({
     battleId: battle.id,
     joinCode: battle.joinCode,
     status: battle.status,
     hostId: battle.hostId,
-    hostName: userMap.get(battle.hostId) ?? "",
+    hostName: hostInfo?.name ?? "",
+    hostImage: hostInfo?.image ?? null,
+    hostXp: hostInfo?.xp ?? 0,
+    hostLevel: hostInfo?.level ?? 1,
     hostRoadmapTitle: roadmapMap.get(battle.hostRoadmapId) ?? "",
     hostWagerTier: battle.hostWagerTier,
     guestId: battle.guestId,
-    guestName: battle.guestId ? (userMap.get(battle.guestId) ?? null) : null,
+    guestName: battle.guestId ? (guestInfo?.name ?? null) : null,
+    guestImage: battle.guestId ? (guestInfo?.image ?? null) : null,
+    guestXp: battle.guestId ? (guestInfo?.xp ?? 0) : null,
+    guestLevel: battle.guestId ? (guestInfo?.level ?? 1) : null,
     guestRoadmapTitle: battle.guestRoadmapId
       ? (roadmapMap.get(battle.guestRoadmapId) ?? null)
       : null,
