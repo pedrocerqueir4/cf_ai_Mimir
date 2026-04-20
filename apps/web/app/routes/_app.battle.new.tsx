@@ -11,21 +11,19 @@ import {
   QuestionCountPicker,
   type QuestionCount,
 } from "~/components/battle/QuestionCountPicker";
-import {
-  WagerTierPicker,
-  type WagerTier,
-} from "~/components/battle/WagerTierPicker";
+// Plan 04-11, Task 2: the illustrative WagerTierPicker that used to live
+// here was removed — the actual wager proposal happens in the pre-battle
+// (/battle/pre/:id) flow after both players have joined. Leaving a
+// placeholder picker on /battle/new produced a "double-wager" UX where
+// the host was prompted to pick a tier twice.
 import {
   BattleApiError,
   createBattle,
   fetchRoadmaps,
-  fetchUserStats,
 } from "~/lib/api-client";
-import { getLocalTimezone } from "~/lib/utils";
 
 export default function BattleNewPage() {
   const navigate = useNavigate();
-  const tz = getLocalTimezone();
 
   const {
     data: roadmaps,
@@ -36,23 +34,10 @@ export default function BattleNewPage() {
     queryFn: fetchRoadmaps,
   });
 
-  // XP is needed to show the per-tier preview. We tolerate errors here — the
-  // picker renders without previews if XP is unavailable.
-  const { data: userStats } = useQuery({
-    queryKey: ["user", "stats"],
-    queryFn: () => fetchUserStats(tz),
-    staleTime: 30_000,
-  });
-
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(
     null,
   );
   const [questionCount, setQuestionCount] = useState<QuestionCount>(10);
-  const [wagerTier] = useState<WagerTier>(10);
-  // Intentionally keep wagerTier here for UX parity with the create form;
-  // the actual wager proposal happens in Plan 06's pre-battle step. The
-  // picker here is illustrative — users see their options before committing.
-  const [wagerTierLocal, setWagerTierLocal] = useState<WagerTier>(wagerTier);
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -152,12 +137,6 @@ export default function BattleNewPage() {
         <QuestionCountPicker
           value={questionCount}
           onChange={setQuestionCount}
-        />
-
-        <WagerTierPicker
-          value={wagerTierLocal}
-          onChange={setWagerTierLocal}
-          currentXp={userStats?.xp}
         />
 
         {errorMsg && (
