@@ -18,6 +18,7 @@ import {
   submitWager,
   type BattleLobbyState,
 } from "~/lib/api-client";
+import { applyWagerResponseToCache } from "~/lib/battle-wager-cache";
 import { Button } from "~/components/ui/button";
 import { WagerTierPicker, type WagerTier } from "~/components/battle/WagerTierPicker";
 import { RoadmapRevealScreen } from "~/components/battle/RoadmapRevealScreen";
@@ -101,6 +102,17 @@ function BattlePreInner({
   // so we can transition to 'stuck' after 45s of no progress. useRef (not
   // useState) because a wall-clock reference must not trigger re-renders.
   const loadingStartedAtRef = useRef<number | null>(null);
+  // Gap 04-11: separate ref for the 'waiting-for-opponent' watchdog. When
+  // both wagers have been submitted but the server-side pool hasn't marked
+  // ready within 45s, we ALSO show the stuck pane. Separate ref from
+  // `loadingStartedAtRef` so the two timers don't collide when phase flips
+  // back and forth.
+  const waitingStartedAtRef = useRef<number | null>(null);
+  // Which phase armed the current stuck-pane timer — drives which ref the
+  // "Keep waiting" handler resets and which phase we return to.
+  const [stuckReason, setStuckReason] = useState<"loading" | "waiting" | null>(
+    null,
+  );
   const [cancelling, setCancelling] = useState(false);
 
   // Controls whether TanStack Query keeps polling. Stops the instant we
@@ -224,65 +236,104 @@ function BattlePreInner({
     setPhase("waiting-for-opponent");
   }, [lobby, currentUserId, phase]);
 
-  // ─── Gap 04-10: pool-generating elapsed-time watchdog ────────────────
-  // If poolStatus stays 'generating' for > 45s while we're still in
-  // 'loading', surface the stuck-pane. 'waiting-for-opponent' and
-  // 'wager-propose' are NOT subject to this timer — the user has control
-  // of the UI in those phases. Pairs with Task 1's tightened workflow
-  // retries (~9s) to bound the silent-spinner window at the UX layer
-  // even if the workflow somehow hasn't flipped poolStatus='failed'.
+  // ─── Gap 04-10 + 04-11: pool-generating elapsed-time watchdog ────────
+  // Two arming conditions:
+  //   (a) Plan 04-10: `loading` phase + poolStatus === 'generating' for >45s
+  //   (b) Plan 04-11: `waiting-for-opponent` phase + both wagers submitted
+  //       + poolStatus !== 'ready' for >45s
+  // Both transition to the 'stuck' phase with the same user-facing pane.
+  // Separate refs (loadingStartedAtRef vs waitingStartedAtRef) so the two
+  // timers don't collide when phase flips back and forth; `stuckReason`
+  // tracks which phase armed the current timer so handleKeepWaiting
+  // resets the correct ref + returns to the right phase.
   useEffect(() => {
-    if (phase !== "loading") {
-      loadingStartedAtRef.current = null;
+    const bothProposed =
+      lobby?.hostWagerTier != null && lobby?.guestWagerTier != null;
+    const poolNotReady = lobby?.poolStatus !== "ready";
+
+    const shouldArmLoading =
+      phase === "loading" && lobby?.poolStatus === "generating";
+    const shouldArmWaiting =
+      phase === "waiting-for-opponent" && bothProposed && poolNotReady;
+
+    if (shouldArmLoading) {
+      if (loadingStartedAtRef.current === null) {
+        loadingStartedAtRef.current = Date.now();
+        setStuckReason("loading");
+        return;
+      }
+      const elapsed = Date.now() - loadingStartedAtRef.current;
+      if (elapsed > POOL_STUCK_THRESHOLD_MS) {
+        setPhase("stuck");
+      }
       return;
     }
-    if (!lobby || lobby.poolStatus !== "generating") {
-      loadingStartedAtRef.current = null;
+
+    if (shouldArmWaiting) {
+      if (waitingStartedAtRef.current === null) {
+        waitingStartedAtRef.current = Date.now();
+        setStuckReason("waiting");
+        return;
+      }
+      const elapsed = Date.now() - waitingStartedAtRef.current;
+      if (elapsed > POOL_STUCK_THRESHOLD_MS) {
+        setPhase("stuck");
+      }
       return;
     }
-    if (loadingStartedAtRef.current === null) {
-      loadingStartedAtRef.current = Date.now();
-      return;
+
+    // Neither armed → reset whichever ref had been set, and clear
+    // stuckReason if it matches the ref we just reset. We leave
+    // `stuckReason` alone when `phase === 'stuck'` so the keep-waiting
+    // handler still knows which timer to reset.
+    if (phase !== "stuck") {
+      if (loadingStartedAtRef.current !== null) {
+        loadingStartedAtRef.current = null;
+      }
+      if (waitingStartedAtRef.current !== null) {
+        waitingStartedAtRef.current = null;
+      }
+      if (stuckReason !== null) {
+        setStuckReason(null);
+      }
     }
-    const elapsed = Date.now() - loadingStartedAtRef.current;
-    if (elapsed > POOL_STUCK_THRESHOLD_MS) {
-      setPhase("stuck");
-    }
-  }, [lobby, phase]);
+  }, [lobby, phase, stuckReason]);
 
   // ─── Wager submission ────────────────────────────────────────────────
   const handleSubmitWager = useCallback(async () => {
     setSubmittingWager(true);
     try {
       const response = await submitWager(battleId, selectedTier);
-      // If *we* were the second proposer, the response carries the applied
-      // tier immediately — force an invalidate so the lobby query picks it
-      // up on its next tick (or immediately in flight).
+      // Plan 04-11, Task 1: apply the server response to the
+      // ["battle", battleId, "lobby-pre"] cache UNCONDITIONALLY on any 2xx,
+      // not only when the server reports bothProposed. Previously the FIRST
+      // submitter would see a stale `hostWagerTier: null` / `guestWagerTier:
+      // null` lobby on the very next poll, and the phase-transition
+      // useEffect would bounce the UI back to the `wager-propose` phase —
+      // looked like the submit did nothing. The pure helper also forwards
+      // appliedTier when bothProposed so the roadmap reveal can fire
+      // without waiting for the next poll round-trip.
+      queryClient.setQueryData<BattleLobbyState | undefined>(
+        ["battle", battleId, "lobby-pre"],
+        (prev) =>
+          applyWagerResponseToCache(
+            prev,
+            {
+              tier: response.tier,
+              bothProposed: response.bothProposed,
+              appliedTier: response.appliedTier,
+              hostWagerAmount: response.hostWagerAmount,
+              guestWagerAmount: response.guestWagerAmount,
+            },
+            currentUserId,
+            selectedTier,
+          ),
+      );
+      // Still invalidate so a follow-up network poll will reconcile any
+      // server-side fields we didn't merge (e.g., pool status).
       queryClient.invalidateQueries({
         queryKey: ["battle", battleId, "lobby-pre"],
       });
-      if (response.bothProposed && response.appliedTier != null) {
-        // Seed an optimistic lobby update so the reveal can fire without
-        // waiting for the next poll cycle.
-        queryClient.setQueryData<BattleLobbyState | undefined>(
-          ["battle", battleId, "lobby-pre"],
-          (prev) =>
-            prev
-              ? {
-                  ...prev,
-                  hostWagerTier:
-                    prev.hostId === currentUserId
-                      ? (selectedTier as 10 | 15 | 20)
-                      : prev.hostWagerTier,
-                  guestWagerTier:
-                    prev.guestId === currentUserId
-                      ? (selectedTier as 10 | 15 | 20)
-                      : prev.guestWagerTier,
-                  appliedWagerTier: response.appliedTier,
-                }
-              : prev,
-        );
-      }
       setPhase("waiting-for-opponent");
     } catch (err) {
       const apiError =
@@ -317,11 +368,19 @@ function BattlePreInner({
   }, [battleId, cancelling, navigate]);
 
   const handleKeepWaiting = useCallback(() => {
-    // Reset the elapsed-time ref so the 45s window restarts, then drop
-    // back to 'loading'. Polling resumes (pollActive re-derives true).
-    loadingStartedAtRef.current = Date.now();
-    setPhase("loading");
-  }, []);
+    // Reset the appropriate elapsed-time ref so the 45s window restarts,
+    // then drop back to the phase that armed the watchdog. Polling resumes
+    // because pollActive re-derives true for both 'loading' and
+    // 'waiting-for-opponent'. If we can't tell which armed it (shouldn't
+    // happen), fall back to 'loading'.
+    if (stuckReason === "waiting") {
+      waitingStartedAtRef.current = Date.now();
+      setPhase("waiting-for-opponent");
+    } else {
+      loadingStartedAtRef.current = Date.now();
+      setPhase("loading");
+    }
+  }, [stuckReason]);
 
   // ─── Reveal-sequence handlers ────────────────────────────────────────
   const handleRoadmapRevealComplete = useCallback(() => {
