@@ -81,6 +81,10 @@ audited: 2026-04-19
 | 04-32 | 09 | 7 | MULT-01 | T-04-gap-01 | Join path: battle state remains in 'lobby' when findOrQueueTopic fails on transient AI upstream error (1031); retry-with-jitter absorbs transient failures; joinCode remains valid | integration | `npm test -- tests/battle/battle.join.pool-failure.test.ts` | ✅ | ✅ green |
 | 04-33 | 10 | 7 | MULT-01, MULT-02 | T-04-gap-04 | BattleQuestionGenerationWorkflow step-1 failure propagates to battle_pool_topics.status='failed' via markPoolTopicFailed within tightened retry window; no partial writes to battle_quiz_pool on failure; simulated outer-catch path flips status for polling GET /api/battle/:id clients | integration | `npm test -- tests/battle/battle.workflow.failure.test.ts` | ✅ | ✅ green |
 | 04-34 | 10 | 7 | MULT-01, MULT-02 | T-04-gap-05 | Pre-battle stuck-pane UX: after 45s of poolStatus='generating' in the 'loading' phase, UI shows 'Taking longer than expected' pane with 'Cancel and try again' CTA (wires /api/battle/:id/cancel + navigate to /battle) and 'Keep waiting' CTA (resets 45s timer) | manual | Open /battle on two sessions; host creates + guest joins; force workflow failure (disable env.AI binding or induce network drop). Wait ≥45s on pre-battle page. Confirm StuckPane renders; click 'Cancel and try again' → verify return to /battle. Re-run and click 'Keep waiting' → confirm spinner returns and 45s window restarts. | ✅ | ✅ manual-only |
+| 04-35 | 11 | 7 | MULT-04 | T-04-gap-07 | Wager submit advance: applyWagerResponseToCache merges the server-canonical wager fields into the TanStack cache UNCONDITIONALLY on 2xx — first-submitter's tier is set, opponent's tier preserved, bothProposed forwards appliedTier. Locks phase-regression contract: (currentUserId===hostId ? hostWagerTier : guestWagerTier) is non-null post-submit so the pre-battle useEffect does NOT bounce back to wager-propose. | unit | `npm test -- tests/battle/battle.wager.advance.test.ts` | ✅ | ✅ green |
+| 04-36 | 11 | 7 | MULT-01 | T-04-gap-09 | GET /api/battle/:id response includes per-participant name/image/xp/level so the lobby ParticipantCard can render rich identity tiles. LEFT JOIN user_stats + computeLevel(xp) derivation server-side; defaults xp:0 / level:1 when user_stats row absent. | integration | `npm test -- tests/battle/battle.lobby.participants.test.ts` | ✅ | ✅ green |
+| 04-37 | 11 | 7 | MULT-04 | T-04-gap-08 | Static-source gate: /battle/new route no longer references WagerTierPicker / wagerTier / fetchUserStats / getLocalTimezone — the illustrative wager picker that produced the Test 7 "double-wager" UX complaint is removed. Asserted by a `?raw` Vite import of the route source + regex absence check. | automated | `npm test -- tests/battle/battle.wager.advance.test.ts` (static-source block) | ✅ | ✅ green |
+| 04-38 | 11 | 7 | MULT-01 | — | Lobby ParticipantCard renders opponent name/image/level/XP on connect: when the guest joins, the host's lobby view updates with a second ParticipantCard tile showing the guest's avatar (or initials), name, level badge, and total XP. Before-join the slot renders a 'Waiting for opponent to join…' placeholder. | manual | Open two browser sessions. Host creates a battle; guest pastes the code. On the host's lobby screen confirm the guest's ParticipantCard appears with their name, level badge, and XP. Reverse: on the guest's side confirm the host's tile renders identically. Trigger with both avatars-set and avatar-null users to confirm the initials fallback. | ✅ | ✅ manual-only |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -110,6 +114,7 @@ audited: 2026-04-19
 | Pre-battle roadmap + wager slot-machine reveals with confetti (Plan 06) | MULT-04 | Animation timing/feel is subjective; visual/perceptual; manual UAT | Complete a battle join; confirm two reveals (roadmap then wager) each play for ~2s with confetti + scale pulse; verify reduced-motion emulation renders final state immediately |
 | Battle room WebSocket client + reconnect overlay + results screen (Plan 07) | MULT-02, MULT-05 | Requires two concurrent browser sessions + network-failure simulation; manual UAT | Run full battle on two browsers; mid-battle close one tab; confirm opponent sees ReconnectOverlay + Sonner toast; reconnect within 30s restores state; 4001 close eviction works on multi-tab |
 | Pre-battle stuck-pane + 45s pool-generating timeout (Plan 10) | MULT-01, MULT-02 | Requires real-time poll + 45s wall-clock timer + navigation flow; React Testing Library not wired in this repo; simulating the 45s window in unit tests would be flaky and test the timer mock rather than the real UX | Open /battle on two concurrent sessions. Force workflow failure (e.g., `wrangler dev` with AI binding disabled or induce network drop in devtools). Host creates → guest joins → pre-battle page enters `loading`. Wait ≥45s. Confirm StuckPane renders with 'Taking longer than expected' heading and two CTAs. Click 'Cancel and try again' → verify navigation to /battle. Re-run the flow and click 'Keep waiting' → confirm spinner returns and the 45s timer resets. |
+| Lobby ParticipantCard renders opponent name/image/level/XP on connect (Plan 11) | MULT-01 | Visual/presentational — avatar-vs-initials fallback, LevelBadge visual integration, and two-session real-time refresh on guest join. RTL not wired in this repo; simulating the lobby-poll-to-render pipeline would test the mocks rather than the UX. | Open /battle on two concurrent browser sessions. Host creates a battle. Host's lobby shows a single ParticipantCard (host) plus a dashed-border "Waiting for opponent to join…" placeholder. Guest pastes the code. Within one poll tick the host's lobby replaces the placeholder with a ParticipantCard for the guest showing name, avatar (or initials fallback), LevelBadge, and `X XP`. Swap roles and verify the guest sees the host's tile identically. Set one user's avatar to null in the DB to confirm the initials fallback renders. |
 
 ---
 
@@ -130,13 +135,13 @@ audited: 2026-04-19
 
 | Metric | Count |
 |--------|-------|
-| Test IDs audited | 37 (04-W0-01..03 + 04-01..31 + 04-32 + 04-33 + 04-34) |
-| COVERED (green) | 37 (35 automated green + 1 automated green 04-33 + 1 manual-only 04-34) |
+| Test IDs audited | 40 (04-W0-01..03 + 04-01..31 + 04-32 + 04-33 + 04-34 + 04-35 + 04-36 + 04-37 + 04-38) |
+| COVERED (green) | 40 (37 automated green + 1 manual-only 04-34 + 1 automated green 04-37 static-source + 1 manual-only 04-38) |
 | PARTIAL | 0 |
 | MISSING | 0 |
 | Gaps found | 0 |
 | Gaps resolved | 0 |
-| Escalated to manual-only | 1 (04-34 — frontend 45s wall-clock stuck-pane UX; declared upfront per Nyquist 8a) |
+| Escalated to manual-only | 2 (04-34 — 45s wall-clock stuck-pane; 04-38 — lobby ParticipantCard visual/presentational; both declared upfront per Nyquist 8a) |
 
 **Notes:**
 - Tests 04-12 and 04-13 consolidated into `tests/battle/battle.wager.test.ts` (9 assertions covering tier-set validation AND 10-XP floor enforcement). Single-file vs two-file split was an execution-time implementation choice — both behaviors fully verified.
@@ -174,3 +179,19 @@ audited: 2026-04-19
 | Verified | `tests/battle/battle.workflow.failure.test.ts` 3/3 green (~9s); full battle suite 34 files / 128 assertions green post-fix (~67s, under 90s Nyquist budget) |
 
 **Nyquist compliance preserved:** Test 04-33 runs on the same per-task cadence with ~9s latency; Test 04-34 is declared manual-only upfront (Nyquist 8a — real-time poll + 45s wall-clock timer + navigation flow, RTL not wired in this repo; simulating the window in unit tests would test the mock rather than the UX). Both counters bumped 35 → 37; frontmatter `nyquist_compliant: true` preserved.
+
+## Validation Audit Addendum 2026-04-19d (gap 04-11)
+
+| Metric | Delta |
+|--------|-------|
+| Test IDs added | 4 (04-35 automated unit, 04-36 automated integration, 04-37 automated static-source, 04-38 manual-only) |
+| New test files | `tests/battle/battle.wager.advance.test.ts` (6 assertions: 5 pure-function + 1 static-source block), `tests/battle/battle.lobby.participants.test.ts` (3 integration assertions A/B/C) |
+| Requirements | MULT-01 (lobby participant identity surface), MULT-04 (wager state-machine correctness) |
+| Threat refs | T-04-gap-07 (D — wager-submit cache miss leaves UI bounced, blocking battle progression), T-04-gap-08 (UX brittleness — duplicate wager prompt across Create and pre-battle flows), T-04-gap-09 (information opacity — lobby cannot surface opponent identity needed for informed wager decision) |
+| Source gap | `.planning/phases/04-multiplayer-battles/04-UAT.md` Test 7 — three issues bundled: (1) both players stuck after picking wager tier, UI doesn't advance to `/battle/pre/:id`; (2) host prompted for wager twice (Create form + pre-battle); (3) enhancement — show opponent name/level/XP in lobby |
+| Fix applied | (1) Extract `applyWagerResponseToCache` into `apps/web/app/lib/battle-wager-cache.ts`; rewrite pre-battle `handleSubmitWager` to apply cache merge UNCONDITIONALLY on 2xx (not only `bothProposed`) — fixes first-submitter bounce-back. Also extend the stuck-pane watchdog to cover `waiting-for-opponent` + both-wagers-submitted + pool-not-ready > 45s with separate `waitingStartedAtRef` + `stuckReason` state. (2) Remove the illustrative `WagerTierPicker` + `useQuery(userStats)` + `fetchUserStats`/`getLocalTimezone`/`WagerTier` imports from `apps/web/app/routes/_app.battle.new.tsx` — Create form now only collects roadmap + question count. (3) Extend GET `/api/battle/:id` to surface `hostImage/hostXp/hostLevel/guestImage/guestXp/guestLevel` via LEFT JOIN `user_stats` + `computeLevel(xp)` (import added from `../lib/xp`). Wire two `ParticipantCard` tiles into the lobby (new component at `apps/web/app/components/battle/ParticipantCard.tsx`, imports existing `LevelBadge`). |
+| Fix commits | `ca60a68` (Task 1 wager cache + watchdog), `b6adf9f` (Task 2 Create cleanup), `e8d8484` (Task 3 backend participant fields), `da63695` (Task 4 frontend ParticipantCard), `3389fef` (Task 5 regression tests) |
+| Deferred follow-ups | None. The UAT Test 7 bundle is closed. `.planning/STATE.md` remains the orchestrator's responsibility; Plan 04-11 does not mutate it. |
+| Verified | `tests/battle/battle.wager.advance.test.ts` 6/6 green (~8s), `tests/battle/battle.lobby.participants.test.ts` 3/3 green (~7s); full battle suite 36 files / 144 assertions green (one pre-existing DO cold-start race flake in `battle.score.test.ts` passes on isolated re-run — not introduced by this plan). Backend `cd worker && npx tsc --noEmit` exit 0; frontend `cd apps/web && npx tsc -b` exit 0. |
+
+**Nyquist compliance preserved:** Tests 04-35 / 04-36 / 04-37 run on the same per-task cadence. Counters bumped 37 → 40. Escalated-to-manual count bumped 1 → 2 (04-34 + 04-38 — both declared upfront per Nyquist 8a: 04-38 is visual/presentational — avatar-vs-initials fallback + LevelBadge visual integration + two-session real-time refresh — which RTL is not wired to assert in this repo). Frontmatter `nyquist_compliant: true` preserved.
