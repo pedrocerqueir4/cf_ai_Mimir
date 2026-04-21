@@ -192,6 +192,47 @@ export async function markPoolTopicFailed(
     .where(eq(schema.battlePoolTopics.id, poolTopicId));
 }
 
+/**
+ * Gap 04-12: observability stamp. Writes `Date.now()` (unix ms) to
+ * battle_pool_topics.workflow_started_at so a silently-dropped workflow
+ * (scheduling succeeded, runtime never ran) is distinguishable from a
+ * slow one. updatedAt is also refreshed so the DO pool-timeout alarm's
+ * staleness check sees fresh activity.
+ *
+ * WARN-5 footgun: `workflow_started_at` is stored as unix MILLISECONDS
+ * (raw Date.now()), while `createdAt` / `updatedAt` on the same table
+ * use `mode: "timestamp"` (unix SECONDS). Intentional — the 60s
+ * pool-timeout windowing in POST /:id/pool/retry requires millisecond
+ * precision. See the schema comment on `battlePoolTopics.workflowStartedAt`
+ * in worker/src/db/schema.ts for the authoritative note.
+ */
+export async function markWorkflowStarted(
+  env: Env,
+  poolTopicId: string,
+): Promise<void> {
+  const db = drizzle(env.DB, { schema });
+  await db
+    .update(schema.battlePoolTopics)
+    .set({ workflowStartedAt: Date.now(), updatedAt: new Date() })
+    .where(eq(schema.battlePoolTopics.id, poolTopicId));
+}
+
+/**
+ * Gap 04-12: inverse of markWorkflowStarted — called by
+ * POST /api/battle/:id/pool/retry BEFORE re-firing the workflow, so the
+ * retry-detection staleness check starts cleanly on the next run.
+ */
+export async function nullWorkflowStartedAt(
+  env: Env,
+  poolTopicId: string,
+): Promise<void> {
+  const db = drizzle(env.DB, { schema });
+  await db
+    .update(schema.battlePoolTopics)
+    .set({ workflowStartedAt: null, updatedAt: new Date() })
+    .where(eq(schema.battlePoolTopics.id, poolTopicId));
+}
+
 // ─── Workflow ─────────────────────────────────────────────────────────────────
 // Composes the exported helpers above inside step.do() blocks. Retries match
 // the pattern used in ContentGenerationWorkflow.ts. On FATAL failure (retries
@@ -209,6 +250,28 @@ export class BattleQuestionGenerationWorkflow extends WorkflowEntrypoint<
     );
 
     try {
+      // ── Step 0 (gap 04-12): stamp workflow_started_at so silent drops
+      // are distinguishable from slow runs by the POST /pool/retry
+      // endpoint and the BattleRoom DO pool-timeout alarm. Tight retry
+      // budget (limit:2, delay:1s → ~3s max) because a single D1 write
+      // is cheap — don't eat the step-1 budget on a trivial stamp.
+      await step.do(
+        "record-workflow-started",
+        {
+          retries: {
+            limit: 2,
+            delay: "1 seconds",
+            backoff: "exponential",
+          },
+        },
+        async () => {
+          await markWorkflowStarted(this.env, poolTopicId);
+          console.log(
+            `[BattleQuestionGenerationWorkflow] Step 0: DONE — workflow_started_at stamped for poolTopicId="${poolTopicId}"`,
+          );
+        },
+      );
+
       // ── Step 1: generate + store 20 questions (returns IDs only) ─────────
       const questionIds = await step.do(
         "generate-battle-questions",
