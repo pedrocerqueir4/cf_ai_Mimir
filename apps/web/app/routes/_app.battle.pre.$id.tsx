@@ -14,9 +14,11 @@ import {
   BattleApiError,
   cancelBattle,
   fetchBattleLobby,
+  retryBattlePool,
   startBattle,
   submitWager,
   type BattleLobbyState,
+  type PoolRetryResponse,
 } from "~/lib/api-client";
 import { applyWagerResponseToCache } from "~/lib/battle-wager-cache";
 import { Button } from "~/components/ui/button";
@@ -114,6 +116,11 @@ function BattlePreInner({
     null,
   );
   const [cancelling, setCancelling] = useState(false);
+  // Gap 04-13: retry state for the host-only 'Retry pool generation' CTA.
+  // Decoupled from `cancelling` so the two CTAs can be in-flight independently
+  // (in practice they cannot — the stuck pane only shows one at a time — but
+  // keep the state isolated for clarity).
+  const [retrying, setRetrying] = useState(false);
 
   // Controls whether TanStack Query keeps polling. Stops the instant we
   // transition into a reveal so the lobby doesn't keep hitting the API
@@ -382,6 +389,77 @@ function BattlePreInner({
     }
   }, [stuckReason]);
 
+  // ─── Gap 04-13: host-only pool retry CTA ─────────────────────────────
+  // Only shown to the host (UI gate: lobby.hostId === currentUserId). The
+  // backend is also host-gated (403 for guests) — the conditional render is
+  // defense-in-depth + UX polish.
+  //
+  // Response discriminator:
+  //   - {status: 'ready'}             → 200: no-op, let the phase effect promote
+  //   - {status: 'generating', restarted: true}  → 202: we just fired a new run
+  //   - {status: 'generating', inFlight: true}   → 409: a recent run is still alive
+  //   - 4xx/5xx other                 → error toast, stay on StuckPane
+  const handleRetryPool = useCallback(async () => {
+    // WARN-7: defensive guard against a fast-remount race where lobby
+    // becomes null OR the current user is no longer the host between
+    // render (canRetry=true) and click. StuckPane should not render
+    // without a resolved lobby + host identity, but belt-and-suspenders.
+    if (!lobby || lobby.hostId !== currentUserId) return;
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      const response: PoolRetryResponse = await retryBattlePool(battleId);
+      if (response.status === "ready") {
+        // Idempotent no-op: the workflow finished between our last poll and
+        // the retry click. Invalidate the lobby-pre query so the phase
+        // effect promotes to roadmap-reveal on the next tick.
+        queryClient.invalidateQueries({
+          queryKey: ["battle", battleId, "lobby-pre"],
+        });
+        toast("Pool is ready — loading the battle…");
+        return;
+      }
+      // status === 'generating' AND restarted === true → new workflow fired.
+      // Reset whichever ref owned the stuck timer and drop back to the
+      // matching phase. If we can't tell, fall back to 'loading'.
+      if (stuckReason === "waiting") {
+        waitingStartedAtRef.current = Date.now();
+        setPhase("waiting-for-opponent");
+      } else {
+        loadingStartedAtRef.current = Date.now();
+        setPhase("loading");
+      }
+      queryClient.invalidateQueries({
+        queryKey: ["battle", battleId, "lobby-pre"],
+      });
+      toast("Retrying pool generation…");
+    } catch (err) {
+      if (err instanceof BattleApiError) {
+        // 409 in-flight path: backend says a recent workflow is still
+        // running. Stay on StuckPane; nudge the user to wait.
+        const isInFlight409 =
+          err.status === 409 &&
+          err.body !== null &&
+          typeof err.body === "object" &&
+          "inFlight" in (err.body as Record<string, unknown>) &&
+          (err.body as Record<string, unknown>).inFlight === true;
+        if (isInFlight409) {
+          toast.warning(
+            "A retry is already running — try again in a moment.",
+          );
+          return;
+        }
+        toast.error(
+          err.serverMessage ?? "Couldn't retry pool generation.",
+        );
+        return;
+      }
+      toast.error("Couldn't retry pool generation.");
+    } finally {
+      setRetrying(false);
+    }
+  }, [battleId, currentUserId, lobby, queryClient, retrying, stuckReason]);
+
   // ─── Reveal-sequence handlers ────────────────────────────────────────
   const handleRoadmapRevealComplete = useCallback(() => {
     setPhase("wager-reveal");
@@ -439,11 +517,18 @@ function BattlePreInner({
 
   // ─── Render ──────────────────────────────────────────────────────────
   if (phase === "stuck") {
+    const canRetry =
+      lobby != null &&
+      currentUserId != null &&
+      lobby.hostId === currentUserId;
     return (
       <StuckPane
         cancelling={cancelling}
         onCancel={handleCancelStuck}
         onKeepWaiting={handleKeepWaiting}
+        canRetry={canRetry}
+        retrying={retrying}
+        onRetry={handleRetryPool}
       />
     );
   }
@@ -656,10 +741,16 @@ function StuckPane({
   cancelling,
   onCancel,
   onKeepWaiting,
+  canRetry,
+  retrying,
+  onRetry,
 }: {
   cancelling: boolean;
   onCancel: () => void;
   onKeepWaiting: () => void;
+  canRetry: boolean;
+  retrying: boolean;
+  onRetry: () => void;
 }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-8">
@@ -677,17 +768,28 @@ function StuckPane({
             onClick={onCancel}
             className="w-full"
             size="lg"
-            disabled={cancelling}
+            disabled={cancelling || retrying}
             variant="destructive"
           >
             {cancelling ? "Cancelling\u2026" : "Cancel and try again"}
           </Button>
+          {canRetry && (
+            <Button
+              onClick={onRetry}
+              className="w-full"
+              size="lg"
+              variant="secondary"
+              disabled={cancelling || retrying}
+            >
+              {retrying ? "Retrying…" : "Retry pool generation"}
+            </Button>
+          )}
           <Button
             onClick={onKeepWaiting}
             className="w-full"
             size="lg"
             variant="outline"
-            disabled={cancelling}
+            disabled={cancelling || retrying}
           >
             Keep waiting
           </Button>
