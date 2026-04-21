@@ -37,9 +37,15 @@ import {
 import { verifyOwnership } from "../middleware/idor-check";
 import { generateUniqueCode } from "../lib/join-code";
 import { computeWagerAmount, type WagerTier } from "../lib/battle-scoring";
-import { findOrQueueTopic, sampleQuestions } from "../services/battle-pool";
+import {
+  findOrQueueTopic,
+  sampleQuestions,
+  embedTopic,
+} from "../services/battle-pool";
 import { assertTopicSafe } from "../validation/battle-prompts";
 import { computeLevel } from "../lib/xp";
+import { nullWorkflowStartedAt } from "../workflows/BattleQuestionGenerationWorkflow";
+import type { PoolRetryResponse } from "../validation/battle-schemas";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -80,6 +86,12 @@ const SubmitWagerBody = z.object({
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const LOBBY_EXPIRY_MS = 5 * 60 * 1000;
+
+// Gap 04-12: retry endpoint in-flight window. If the current workflow
+// stamped workflow_started_at less than this ago, reject retry with 409.
+// Matches BattleRoom POOL_TIMEOUT_MS (60s) so a retry becomes eligible
+// EXACTLY when the DO alarm would fire and flip status to 'failed'.
+const POOL_RETRY_INFLIGHT_WINDOW_MS = 60 * 1000;
 
 /**
  * Pick a uniformly-random byte via crypto.getRandomValues and branch on the
@@ -727,6 +739,138 @@ battleRoutes.post("/:id/cancel", async (c) => {
 
   return c.json({ ok: true });
 });
+
+// ─── POST /:id/pool/retry — host-only pool-generation retry ─────────────
+//
+// Gap 04-12: when BattleQuestionGenerationWorkflow is silently dropped or
+// stalls past the DO 60s alarm (→ poolStatus='failed') OR is still
+// generating past the alarm (also → poolStatus='failed' via DO alarm), the
+// host can tap "Retry pool generation" from the frontend StuckPane to
+// re-schedule the workflow against the SAME poolTopicId. Idempotent by
+// design.
+//
+// Security (T-04-gap-10/11/12):
+//   - authGuard (inherited by battleRoutes.use("/*", …)) blocks unauth'd calls
+//   - sanitize runs on bodied requests (defensive — endpoint takes no body)
+//   - battleJoinRateLimit caps at 10/min per IP (reasonable remediation budget)
+//   - Host-only enforcement: non-hosts get generic 403 (indistinguishable
+//     from "no such battle" — no IDOR enumeration; same pattern as /:id/cancel)
+//   - Topic is READ from battle_pool_topics.topic, NOT accepted from the
+//     request body → no pool-topic poisoning vector (T-04-gap-12)
+//   - 60s in-flight 409 prevents a host holding down the retry button from
+//     firing multiple workflows in parallel (T-04-gap-11 thundering herd)
+
+battleRoutes.post(
+  "/:id/pool/retry",
+  sanitize,
+  battleJoinRateLimit,
+  async (c) => {
+    const userId = c.get("userId")!;
+    const battleId = c.req.param("id")!;
+    const db = drizzle(c.env.DB, { schema });
+
+    const battle = await findBattleForParticipant(db, battleId, userId);
+    if (!battle) return c.text("Forbidden", 403);
+    if (battle.hostId !== userId) return c.text("Forbidden", 403);
+
+    // 404: battle has no pool yet. The StuckPane should only be reachable
+    // after findOrQueueTopic has assigned a poolTopicId; this is a guard rail.
+    if (!battle.poolTopicId) {
+      return c.json({ error: "Battle has no pool to retry" }, 404);
+    }
+    if (!battle.winningTopic) {
+      return c.json({ error: "Battle has no winning topic set" }, 404);
+    }
+    // Retry only valid during pre-battle. If the battle already
+    // started/ended/expired, 409.
+    if (battle.status !== "pre-battle") {
+      return c.json(
+        { error: "Battle is not in a retry-able state" },
+        409,
+      );
+    }
+
+    const [poolRow] = await db
+      .select({
+        id: schema.battlePoolTopics.id,
+        status: schema.battlePoolTopics.status,
+        workflowRunId: schema.battlePoolTopics.workflowRunId,
+        workflowStartedAt: schema.battlePoolTopics.workflowStartedAt,
+        topic: schema.battlePoolTopics.topic,
+      })
+      .from(schema.battlePoolTopics)
+      .where(eq(schema.battlePoolTopics.id, battle.poolTopicId))
+      .limit(1);
+
+    if (!poolRow) {
+      // Defensive: battles.poolTopicId has ON DELETE SET NULL — this
+      // shouldn't happen unless the row was GC'd. Treat as not-retry-able.
+      return c.json({ error: "Pool topic row missing" }, 404);
+    }
+
+    // Already ready → idempotent no-op. The frontend may click retry
+    // after the workflow completed but before the next poll tick.
+    if (poolRow.status === "ready") {
+      return c.json({ status: "ready" } satisfies PoolRetryResponse);
+    }
+
+    // In-flight guard: workflow started within the last 60s → don't
+    // disturb. Client should wait for the current run.
+    if (poolRow.status === "generating") {
+      const startedAt = poolRow.workflowStartedAt ?? null;
+      const inFlight =
+        startedAt !== null && Date.now() - startedAt < POOL_RETRY_INFLIGHT_WINDOW_MS;
+      if (inFlight) {
+        return c.json(
+          {
+            status: "generating",
+            inFlight: true,
+            workflowRunId: poolRow.workflowRunId ?? poolRow.id,
+          } satisfies PoolRetryResponse,
+          409,
+        );
+      }
+      // else → status='generating' but stale → fall through and re-fire.
+    }
+
+    // status === 'failed' OR (generating AND stale) → re-fire workflow
+    // against the SAME poolTopicId. Re-derive the topic embedding from
+    // battle_pool_topics.topic (NOT from the request body — poisoning
+    // prevention per T-04-gap-12).
+    const topicEmbedding = await embedTopic(c.env, poolRow.topic);
+
+    // Reset pool state BEFORE firing the workflow so the new run's step-0
+    // (markWorkflowStarted) can stamp cleanly and the staleness check
+    // in a future retry works as expected.
+    const now = new Date();
+    await db
+      .update(schema.battlePoolTopics)
+      .set({
+        status: "generating",
+        updatedAt: now,
+      })
+      .where(eq(schema.battlePoolTopics.id, poolRow.id));
+    await nullWorkflowStartedAt(c.env, poolRow.id);
+
+    await c.env.BATTLE_QUESTION_WORKFLOW.create({
+      id: poolRow.id,
+      params: {
+        topic: poolRow.topic,
+        poolTopicId: poolRow.id,
+        topicEmbedding,
+      },
+    });
+
+    return c.json(
+      {
+        status: "generating",
+        restarted: true,
+        workflowRunId: poolRow.id,
+      } satisfies PoolRetryResponse,
+      202,
+    );
+  },
+);
 
 // ─── GET /:id — lobby state ────────────────────────────────────────────
 

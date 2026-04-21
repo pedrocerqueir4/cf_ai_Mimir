@@ -134,3 +134,17 @@ export const BattleOutboundSchema = z.discriminatedUnion("type", [
 ]);
 
 export type BattleOutbound = z.infer<typeof BattleOutboundSchema>;
+
+// ─── HTTP response contracts ─────────────────────────────────────────────────
+
+/**
+ * Gap 04-12: response shape for POST /api/battle/:id/pool/retry.
+ * Discriminated by `status`:
+ *   - 'ready'        → 200: pool already ready (idempotent no-op)
+ *   - 'generating'+inFlight  → 409: workflow started < 60s ago, do not disturb
+ *   - 'generating'+restarted → 202: workflow was failed OR stale, new run scheduled
+ */
+export type PoolRetryResponse =
+  | { status: "ready" }
+  | { status: "generating"; inFlight: true; workflowRunId: string }
+  | { status: "generating"; restarted: true; workflowRunId: string };
