@@ -449,6 +449,20 @@ export interface SubmitWagerResponse {
   guestWagerAmount: number | null;
 }
 
+/**
+ * Gap 04-12/04-13: response shape for POST /api/battle/:id/pool/retry.
+ * Mirrors the backend discriminated union exported from
+ * `worker/src/validation/battle-schemas.ts`:
+ *
+ *   - `ready`                        → 200 (idempotent no-op; pool already ready)
+ *   - `generating` + inFlight=true   → 409 (current workflow < 60s old; don't disturb)
+ *   - `generating` + restarted=true  → 202 (workflow was failed or stale; re-fired)
+ */
+export type PoolRetryResponse =
+  | { status: "ready" }
+  | { status: "generating"; inFlight: true; workflowRunId: string }
+  | { status: "generating"; restarted: true; workflowRunId: string };
+
 export interface LeaderboardEntry {
   rank: number;
   userId: string;
@@ -467,15 +481,25 @@ export interface LeaderboardResponse {
 /**
  * BattleApiError carries a status code plus the server-sent error message
  * (if any) so callers can map server errors to copy in UI-SPEC.
+ *
+ * Gap 04-13 (Step A0): extended with an optional `body: unknown` field so
+ * callers that need to discriminate response variants by body payload (e.g.,
+ * `retryBattlePool` — distinguishing a 409 `{inFlight: true}` from a generic
+ * 409) can narrow `err.body` at the call-site without a second fetch. The
+ * 4th constructor arg defaults to `null`, so every existing 3-arg callsite
+ * (`new BattleApiError(status, serverMessage, message)`) keeps compiling.
  */
 export class BattleApiError extends Error {
+  public readonly body: unknown;
   constructor(
     public readonly status: number,
     public readonly serverMessage: string | null,
     message: string,
+    body: unknown = null,
   ) {
     super(message);
     this.name = "BattleApiError";
+    this.body = body;
   }
 }
 
@@ -652,6 +676,50 @@ export async function cancelBattle(
   }
 
   return response.json() as Promise<{ ok: true }>;
+}
+
+/**
+ * Gap 04-13: POST /api/battle/:id/pool/retry — host-only retry of the
+ * BattleQuestionGenerationWorkflow for a stuck pool. Backend is host-gated
+ * (non-hosts get 403); this helper surfaces the discriminated response
+ * so the StuckPane retry CTA can branch on ready / inFlight / restarted.
+ *
+ * On any non-OK HTTP status (including the 409 inFlight case), this throws
+ * a `BattleApiError` with `body` set to the parsed JSON response body (or
+ * null if the body was not JSON). The Task 2 `handleRetryPool` catch
+ * narrows `err.body` to distinguish 409 inFlight from 409 not-retry-able.
+ */
+export async function retryBattlePool(
+  battleId: string,
+): Promise<PoolRetryResponse> {
+  const res = await fetch(
+    `/api/battle/${encodeURIComponent(battleId)}/pool/retry`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!res.ok) {
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      /* ignore non-JSON response body */
+    }
+    const serverMessage =
+      body && typeof body === "object" && "error" in body
+        ? String((body as { error: unknown }).error)
+        : null;
+    // Extended BattleApiError signature (per Step A0):
+    //   (status, serverMessage, message, body)
+    throw new BattleApiError(
+      res.status,
+      serverMessage,
+      serverMessage ?? `Pool retry failed with status ${res.status}`,
+      body,
+    );
+  }
+  return (await res.json()) as PoolRetryResponse;
 }
 
 /**
