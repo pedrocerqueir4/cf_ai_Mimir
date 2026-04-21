@@ -216,7 +216,7 @@ async function retryWithJitter<T>(
 
 // ─── Vectorize helpers ───────────────────────────────────────────────────────
 
-async function embedTopic(env: Env, normalized: string): Promise<number[]> {
+export async function embedTopic(env: Env, normalized: string): Promise<number[]> {
   const resp = (await retryWithJitter(() =>
     (env.AI.run as any)(EMBEDDING_MODEL, {
       text: [normalized],

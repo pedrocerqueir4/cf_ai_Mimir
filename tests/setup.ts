@@ -108,11 +108,14 @@ const CREATE_STATEMENTS = [
     updated_at INTEGER NOT NULL
   )`,
   // Phase 4 battle tables — must match worker/src/db/schema.ts
+  // Gap 04-12: workflow_started_at column added for observability /
+  // silent-drop detection (nullable unix ms; see schema.ts comment).
   `CREATE TABLE IF NOT EXISTS battle_pool_topics (
     id TEXT PRIMARY KEY,
     topic TEXT NOT NULL,
     status TEXT NOT NULL,
     workflow_run_id TEXT,
+    workflow_started_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   )`,

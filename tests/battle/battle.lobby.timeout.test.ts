@@ -95,7 +95,14 @@ describe("BattleRoom lobby timeout (04-04 / D-04)", () => {
     expect(row?.status).toBe("expired");
   });
 
-  it("attachGuest cancels the lobby alarm — no premature expire", async () => {
+  it("attachGuest cancels the lobby alarm and schedules the 60s pool-timeout alarm — no premature expire", async () => {
+    // Gap 04-12: attachGuest now cancels the lobby alarm (5min) AND
+    // immediately schedules a NEW pool-timeout alarm (60s) whose alarm()
+    // branch flips battle_pool_topics.status to 'failed' if still
+    // 'generating' at expiry. Single-alarm-per-DO invariant preserved —
+    // only one alarm is pending at a time, and opStartBattle's existing
+    // deleteAlarm() clears it on transition to 'active'.
+
     const battleId = `b-lobby-cancel-${crypto.randomUUID()}`;
     const id = env.BATTLE_ROOM.idFromName(battleId);
     const stub = env.BATTLE_ROOM.get(id);
@@ -108,26 +115,38 @@ describe("BattleRoom lobby timeout (04-04 / D-04)", () => {
       body: JSON.stringify({ battleId, hostId: HOST_ID, questionCount: 5 }),
     });
 
+    let lobbyAlarmTs: number | null = null;
     await runInDurableObject(stub, async (_inst, state) => {
-      expect(await state.storage.getAlarm()).not.toBeNull();
+      lobbyAlarmTs = await state.storage.getAlarm();
+      expect(lobbyAlarmTs).not.toBeNull();
     });
 
-    // Guest joins → DO cancels the lobby alarm.
+    // Guest joins → DO cancels the lobby alarm AND schedules pool-timeout.
     await stub.fetch("https://do/op", {
       method: "POST",
       headers: { "X-Battle-Op": "attachGuest" },
       body: JSON.stringify({ guestId: "guest-lobby-cancel" }),
     });
 
+    // Gap 04-12: alarm is now the pool-timeout alarm (~60s out), NOT the
+    // lobby alarm (which was 5 minutes out). The timestamp is strictly
+    // earlier than the lobby alarm — proving the lobby alarm was replaced.
     await runInDurableObject(stub, async (_inst, state) => {
-      expect(await state.storage.getAlarm()).toBeNull();
+      const poolAlarmTs = await state.storage.getAlarm();
+      expect(poolAlarmTs).not.toBeNull();
+      if (lobbyAlarmTs !== null && poolAlarmTs !== null) {
+        expect(poolAlarmTs).toBeLessThan(lobbyAlarmTs);
+      }
     });
 
-    // Try to fire an alarm — there is none, so no state change.
+    // Fire the pool-timeout alarm. This test's seed does NOT set
+    // battles.pool_topic_id, so the pre-battle branch early-returns at
+    // the `if (!poolTopicId) return;` guard. Battle row status stays 'lobby'.
     const ran = await runDurableObjectAlarm(stub);
-    expect(ran).toBe(false);
+    expect(ran).toBe(true);
 
-    // D1 battles row is still 'lobby' (NOT expired).
+    // D1 battles row is still 'lobby' (NOT expired — the pool-timeout
+    // branch does NOT touch battles.status; only battle_pool_topics.status).
     const row = await env.DB.prepare(
       `SELECT status FROM battles WHERE id = ?`,
     )

@@ -1,0 +1,1 @@
+ALTER TABLE `battle_pool_topics` ADD `workflow_started_at` integer;

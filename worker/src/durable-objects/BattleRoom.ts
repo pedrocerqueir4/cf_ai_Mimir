@@ -34,6 +34,7 @@ import {
   BATTLE_TIME_LIMIT_MS,
 } from "../lib/battle-scoring";
 import { computeLevel } from "../lib/xp";
+import { markPoolTopicFailed } from "../workflows/BattleQuestionGenerationWorkflow";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -41,6 +42,15 @@ const LOBBY_TIMEOUT_MS = 5 * 60 * 1000; // D-04
 const POST_END_GRACE_MS = 30 * 1000; // D-28
 const IDLE_FORFEIT_MISS_COUNT = 3; // D-26
 const DISCONNECT_GRACE_MS = 30 * 1000; // D-25: 30s reconnect grace
+// Gap 04-12: pool-generating timeout scheduled at end of opAttachGuest.
+// If the battle sits in pre-battle with poolStatus='generating' for this
+// long, alarm() flips poolStatus='failed' so the frontend's existing
+// error pane fires deterministically. 60s pairs with the frontend's 45s
+// stuck-pane watchdog (POOL_STUCK_THRESHOLD_MS): frontend surfaces the
+// recoverable "Cancel / Keep-waiting / Retry" CTAs 15s BEFORE the backend
+// force-fails, so a user clicking "Keep waiting" isn't immediately bounced
+// to the error pane.
+const POOL_TIMEOUT_MS = 60 * 1000;
 const CLOSE_CODE_MOVED = 4001;
 const CLOSE_CODE_INVALID = 4002;
 
@@ -522,9 +532,46 @@ export class BattleRoom extends DurableObject<Env> {
       case "expired":
         await this.destroyBattle();
         return;
-      case "pre-battle":
-        // Pre-battle should never have a pending alarm — no-op if it does.
+      case "pre-battle": {
+        // Gap 04-12: pool-generating timeout. The alarm was scheduled at
+        // the end of opAttachGuest. If it fires while still in pre-battle,
+        // pool generation exceeded POOL_TIMEOUT_MS. Read battles.poolTopicId
+        // → battle_pool_topics.status. If still 'generating', flip it to
+        // 'failed' so the frontend's existing error pane surfaces. If
+        // already 'ready' or 'failed', no-op — the workflow / retry path
+        // resolved it and we're racing-after-the-fact.
+        const cfg = await this.ctx.storage.get<BattleConfig>("config");
+        if (!cfg) return;
+        try {
+          const db = drizzle(this.env.DB, { schema });
+          const [battleRow] = await db
+            .select({ poolTopicId: schema.battles.poolTopicId })
+            .from(schema.battles)
+            .where(eq(schema.battles.id, cfg.battleId))
+            .limit(1);
+          const poolTopicId = battleRow?.poolTopicId ?? null;
+          if (!poolTopicId) return;
+
+          const [poolRow] = await db
+            .select({ status: schema.battlePoolTopics.status })
+            .from(schema.battlePoolTopics)
+            .where(eq(schema.battlePoolTopics.id, poolTopicId))
+            .limit(1);
+          if (poolRow?.status === "generating") {
+            await markPoolTopicFailed(this.env, poolTopicId);
+            console.log(
+              `[BattleRoom alarm] pool-timeout fired — marked poolTopicId="${poolTopicId}" as failed for battleId="${cfg.battleId}"`,
+            );
+          }
+          // status === 'ready' | 'failed' → no-op.
+        } catch (err) {
+          console.error(
+            `[BattleRoom alarm] pool-timeout branch failed for battleId="${cfg.battleId}"`,
+            err,
+          );
+        }
         return;
+      }
     }
   }
 
@@ -1311,6 +1358,13 @@ export class BattleRoom extends DurableObject<Env> {
       /* ignore */
     }
 
+    // Gap 04-12: schedule pool-timeout alarm. runtime.phase is now
+    // 'pre-battle' (set earlier in this handler). The alarm's pre-battle
+    // branch in alarm() reads battles.poolTopicId → battle_pool_topics.status
+    // and flips to 'failed' if still 'generating' at the 60s mark. One-shot
+    // — alarm() does NOT re-schedule.
+    await this.ctx.storage.setAlarm(Date.now() + POOL_TIMEOUT_MS);
+
     return new Response(JSON.stringify({ ok: true, phase: runtime.phase }), {
       headers: { "content-type": "application/json" },
     });
@@ -1353,7 +1407,9 @@ export class BattleRoom extends DurableObject<Env> {
       await this.ctx.storage.put("config", config);
     }
 
-    // Cancel any pending lobby alarm — battle is starting.
+    // Cancel any pending lobby OR pool-timeout alarm — battle is starting.
+    // (Gap 04-12: the pool-timeout alarm scheduled in opAttachGuest is
+    // cleared here so it can't fire after the transition to active.)
     try {
       await this.ctx.storage.deleteAlarm();
     } catch {

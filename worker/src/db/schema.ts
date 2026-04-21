@@ -88,6 +88,29 @@ export const battlePoolTopics = sqliteTable("battle_pool_topics", {
   workflowRunId: text("workflow_run_id"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  // Gap 04-12: observability + silent-drop detection. Stamped by the
+  // `record-workflow-started` step (the first step of
+  // BattleQuestionGenerationWorkflow.run). Nulled by
+  // POST /api/battle/:id/pool/retry before it re-fires the workflow.
+  // If `status='generating'` AND `workflowStartedAt IS NULL` AND
+  // `updated_at < now - 60s`, the workflow was silently dropped by the
+  // Cloudflare Workflows runtime — the DO pool-timeout alarm (also
+  // 60s) will flip status to 'failed' regardless.
+  // Nullable on purpose — pre-existing rows (migrated DB) will read
+  // as NULL and the retry endpoint treats NULL as "never started,
+  // treat as timed out."
+  //
+  // NOTE (storage units — WARN-5 footgun): `workflow_started_at` is
+  // stored as **unix MILLISECONDS** (raw `Date.now()` with NO
+  // `mode: "timestamp"` wrapper), unlike `createdAt` / `updatedAt` on
+  // this same table which use `mode: "timestamp"` (unix SECONDS). This
+  // is intentional — the 60s pool-timeout windowing in
+  // POST /:id/pool/retry and the DO alarm branch both compare
+  // `Date.now() - workflowStartedAt < 60_000`, so millisecond precision
+  // matters. Cross-reference: `markWorkflowStarted` / `nullWorkflowStartedAt`
+  // helpers in BattleQuestionGenerationWorkflow.ts mirror this same
+  // note in their JSDoc.
+  workflowStartedAt: integer("workflow_started_at"),
 });
 
 export const battleQuizPool = sqliteTable("battle_quiz_pool", {
