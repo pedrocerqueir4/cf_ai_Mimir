@@ -115,7 +115,7 @@ Plans:
   3. Speed-weighted scoring is calculated server-side: faster correct answers yield higher points and the client cannot alter the score
   4. User can wager XP before a battle (capped at 10-20% of their current XP) and the winner's XP balance updates after the battle ends
   5. If a WebSocket connection drops mid-battle, the client reconnects and the game state is restored from the server without corrupting scores
-**Plans**: 9 plans
+**Plans**: 15 plans
 
 Plans:
 - [x] 04-00-PLAN.md — Wave 0: wrangler bindings (DO + Workflow + battle rate limits), BattleRoom + BattleQuestionGenerationWorkflow skeletons, 31 it.todo stub map
@@ -127,6 +127,12 @@ Plans:
 - [x] 04-06-PLAN.md — Pre-battle reveals: SlotMachineReel (framer-motion), RoadmapRevealScreen, WagerRevealScreen, canvas-confetti, reduced-motion path
 - [x] 04-07-PLAN.md — Battle room + Results: Zustand store, useBattleSocket hook, BattleTimer/ScoreCard/ConnectionDot/BattleQuestion/ReconnectOverlay, results screen
 - [x] 04-08-PLAN.md — Atomic XP transfer (env.DB.batch) + idempotent ledger + disconnect/reconnect/timer-pause/forfeit DO logic
+- [x] 04-09-PLAN.md — Gap closure: join-path AI 1031 isolation (retry-with-jitter + re-ordered findOrQueueTopic + structured 503)
+- [x] 04-10-PLAN.md — Gap closure: workflow-failure fast-fail + frontend 45s stuck-pane (StuckPane + tightened step-1 retry)
+- [x] 04-11-PLAN.md — Gap closure: wager-submit cache bounce fix + /battle/new Create-wager cleanup + lobby ParticipantCard (name/level/XP)
+- [ ] 04-12-PLAN.md — Gap closure: backend pool-stuck recovery (schema + DO alarm + observability stamp + host retry endpoint)
+- [ ] 04-13-PLAN.md — Gap closure: frontend host retry UX (StuckPane 'Retry pool generation' CTA + api-client wiring)
+- [ ] 04-14-PLAN.md — Gap closure: regression tests (DO alarm, retry endpoint, workflow_started_at helpers)
 
 ## Progress
 
@@ -139,4 +145,4 @@ Phases execute in numeric order: 01 -> 02 -> 02.1 -> 03 -> 04
 | 02. AI Content Pipeline | 10/11 | In Progress|  |
 | 02.1 Integration Fixes | 0/2 | Not started | - |
 | 03. Gamification | 0/5 | Not started | - |
-| 04. Multiplayer Battles | 8/9 | In Progress|  |
+| 04. Multiplayer Battles | 12/15 | In Progress|  |
