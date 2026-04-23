@@ -1,0 +1,23 @@
+# Worker-side secrets read by wrangler dev from `.dev.vars` (gitignored).
+# Copy this file to `.dev.vars` and fill in the values.
+# In production, use `npx wrangler secret put <NAME>` instead.
+
+# ─── OAuth providers (optional in dev) ───────────────────────────────────────
+# Better Auth only enables a social provider when BOTH id and secret are set
+# (see `apps/web/workers/app.ts:getOrCreateAuth`). Leaving these as the
+# placeholder "your-..." strings keeps OAuth sign-in buttons hidden without
+# breaking email/password auth.
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+
+# ─── Cloudflare Turnstile (required for /auth/sign-up) ───────────────────────
+# Server-side secret used by the `verify-turnstile` middleware at
+# `worker/src/middleware/verify-turnstile.ts`. Must match the site key in
+# `apps/web/.env` — both public and secret sides of the Turnstile pair have
+# documented test keys that always pass (dev only).
+#
+# The pair below auto-passes in dev. Swap both for real keys in production.
+# Docs: https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
