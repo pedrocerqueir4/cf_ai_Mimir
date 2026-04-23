@@ -17,6 +17,19 @@ export const POOL_SIMILARITY_THRESHOLD = 0.85;
 /** Number of questions generated per topic (D-09). */
 export const POOL_QUESTION_COUNT = 20;
 
+/**
+ * Staleness window for an in-flight workflow (matches BattleRoom
+ * POOL_TIMEOUT_MS and POOL_RETRY_INFLIGHT_WINDOW_MS in routes/battle.ts).
+ *
+ * A row with status='generating' whose workflow_started_at is older than this
+ * window is considered stale — the workflow was silently dropped by the
+ * Cloudflare Workflows runtime, the DO alarm didn't fire (e.g., the battle
+ * was abandoned before setAlarm ran), or the scheduling succeeded but never
+ * executed. findOrQueueTopic will re-fire the workflow in that case rather
+ * than leave the caller polling forever.
+ */
+const POOL_GENERATING_STALENESS_MS = 60 * 1000;
+
 const EMBEDDING_MODEL = "@cf/baai/bge-large-en-v1.5" as const;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -248,10 +261,30 @@ export async function embedTopic(env: Env, normalized: string): Promise<number[]
  * 3. Query Vectorize in the `battle-topics` namespace (topK=1).
  * 4. If top match score > 0.85, verify the pool row is ready and return its
  *    questions as `status: "hit"`.
- * 5. Otherwise, attempt an INSERT OR IGNORE on battle_pool_topics. Winner kicks
- *    off BattleQuestionGenerationWorkflow with the topic + embedding and
- *    returns `status: "miss"`. Loser (UNIQUE collision) re-SELECTs the existing
- *    row and returns `status: "generating"` — no duplicate workflow.
+ * 5. Otherwise, attempt an INSERT OR IGNORE on battle_pool_topics. Three
+ *    sub-cases after the post-INSERT SELECT:
+ *    a. `canonicalId === attemptId` → WINNER: schedule workflow, return 'miss'.
+ *    b. `canonicalId !== attemptId` AND canonical row is a stale gravestone
+ *       (status='failed', or status='generating' that is clearly abandoned —
+ *       workflow_started_at older than POOL_GENERATING_STALENESS_MS, or
+ *       workflow_started_at IS NULL AND updated_at older than the window)
+ *       → RE-QUEUE via a guarded conditional UPDATE, schedule a fresh
+ *       workflow against the canonical id, return 'miss'. The UPDATE's WHERE
+ *       clause is a compare-and-swap — only one caller wins when two clients
+ *       race to revive the same dead row.
+ *    c. `canonicalId !== attemptId` AND canonical row is fresh generating →
+ *       LOSER: return 'generating' pointing at the canonical row (existing
+ *       T-04-10 dedup behavior — preserved).
+ *    d. `canonicalId !== attemptId` AND canonical row is 'ready' → return
+ *       'hit' with sampled questions. Reachable when Vectorize upsert lagged
+ *       or was skipped, but the pool is usable.
+ *
+ *  The staleness check uses TWO signals because `workflow_started_at` is
+ *  stamped by Step 0 of BattleQuestionGenerationWorkflow — a freshly
+ *  INSERTed row has `workflow_started_at = NULL` until that step runs. We
+ *  fall back to `updated_at` (unix SECONDS) for the null-started-at case so
+ *  concurrent MISS inserts don't immediately re-queue each other. Matches
+ *  the pattern used by POST /api/battle/:id/pool/retry.
  */
 export async function findOrQueueTopic(
   env: Env,
@@ -356,8 +389,20 @@ export async function findOrQueueTopic(
   // MISS path — attempt to INSERT a new pool topic row, raced against
   // concurrent callers for the same normalized topic.
   const poolTopicId = crypto.randomUUID();
-  const now = new Date();
-  console.log(`${tag} step=insertOrIgnore START attemptId=${poolTopicId}`);
+  // Workflows instance id is DECOUPLED from poolTopicId. Local miniflare's
+  // create({ id }) silently no-ops when an instance with the given id is in
+  // a terminal state (Errored / Terminated / Complete / Paused) — and the
+  // production Cloudflare Workflows runtime explicitly throws on duplicate
+  // ids (`If a provided id exists, an error will be thrown`). Both failure
+  // modes disappear if every schedule attempt uses a fresh UUID. The pool
+  // row still persists the live instance id in `workflow_run_id` so
+  // honest-status return paths (LOSER branches, /pool/retry responses) can
+  // surface it to clients without coupling pool identity to workflow
+  // identity. See debug session `battle-pool-requeue-silent`.
+  const workflowRunId = crypto.randomUUID();
+  const nowMs = Date.now();
+  const nowSec = Math.floor(nowMs / 1000);
+  console.log(`${tag} step=insertOrIgnore START attemptId=${poolTopicId} workflowRunId=${workflowRunId}`);
 
   // Use raw SQL with INSERT OR IGNORE — Drizzle's onConflictDoNothing
   // requires a conflict target, and we want the global UNIQUE on (topic)
@@ -368,28 +413,39 @@ export async function findOrQueueTopic(
          (id, topic, status, workflow_run_id, created_at, updated_at)
        VALUES (?, ?, 'generating', ?, ?, ?)`,
     )
-    .bind(
-      poolTopicId,
-      normalized,
-      poolTopicId,
-      Math.floor(now.getTime() / 1000),
-      Math.floor(now.getTime() / 1000),
-    )
+    .bind(poolTopicId, normalized, workflowRunId, nowSec, nowSec)
     .run();
   console.log(`${tag} step=insertOrIgnore DONE elapsed=${Date.now() - t0}ms`);
 
   // Fall back: SELECT by topic to read the canonical row. Covers both the
   // "we inserted" case (row exists under poolTopicId) and the race loser
   // case (row exists under someone else's id).
+  //
+  // Projects `status`, `workflow_started_at`, and `updated_at` so the LOSER
+  // branch can distinguish an actively-generating row from a gravestone
+  // left by a previously failed / silently-dropped workflow.
+  //
+  // Unit notes (WARN-5 footgun):
+  //   `workflow_started_at` is unix MILLISECONDS (raw Date.now()).
+  //   `updated_at` is unix SECONDS (drizzle mode: "timestamp").
+  // See schema comment on battlePoolTopics.workflowStartedAt.
   console.log(`${tag} step=selectCanonical START`);
   const canonical = await env.DB
     .prepare(
-      `SELECT id, workflow_run_id FROM battle_pool_topics WHERE topic = ?`,
+      `SELECT id, status, workflow_run_id, workflow_started_at, updated_at
+         FROM battle_pool_topics
+        WHERE topic = ?`,
     )
     .bind(normalized)
-    .first<{ id: string; workflow_run_id: string | null }>();
+    .first<{
+      id: string;
+      status: "generating" | "ready" | "failed";
+      workflow_run_id: string | null;
+      workflow_started_at: number | null;
+      updated_at: number;
+    }>();
   console.log(
-    `${tag} step=selectCanonical DONE elapsed=${Date.now() - t0}ms canonicalId=${canonical?.id ?? "null"}`,
+    `${tag} step=selectCanonical DONE elapsed=${Date.now() - t0}ms canonicalId=${canonical?.id ?? "null"} status=${canonical?.status ?? "n/a"} startedAt=${canonical?.workflow_started_at ?? "n/a"} updatedAt=${canonical?.updated_at ?? "n/a"}`,
   );
 
   if (!canonical) {
@@ -401,6 +457,7 @@ export async function findOrQueueTopic(
   }
 
   const canonicalId = canonical.id;
+  const canonicalStatus = canonical.status;
   const canonicalWorkflowId = canonical.workflow_run_id ?? canonicalId;
 
   // WR-04: race-winner detection via id equality. If the canonical row id
@@ -410,11 +467,16 @@ export async function findOrQueueTopic(
   // of `insertResult.meta.*` counters, which historically drifted between
   // Cloudflare D1 runtime versions.
   if (canonicalId === poolTopicId) {
-    // WINNER — schedule the workflow.
-    console.log(`${tag} race=WINNER scheduling workflow id=${canonicalId}`);
+    // WINNER — schedule the workflow. Instance id = fresh workflowRunId
+    // (already persisted in battle_pool_topics.workflow_run_id by the
+    // INSERT above), NOT canonicalId. See debug session
+    // `battle-pool-requeue-silent` for the collision that motivated this.
+    console.log(
+      `${tag} race=WINNER scheduling workflow poolTopicId=${canonicalId} runId=${workflowRunId}`,
+    );
     console.log(`${tag} step=workflow.create START`);
     await env.BATTLE_QUESTION_WORKFLOW.create({
-      id: canonicalId,
+      id: workflowRunId,
       params: {
         topic: normalized,
         poolTopicId: canonicalId,
@@ -422,20 +484,191 @@ export async function findOrQueueTopic(
       },
     });
     console.log(
-      `${tag} step=workflow.create DONE elapsed=${Date.now() - t0}ms runId=${canonicalId}`,
+      `${tag} step=workflow.create DONE elapsed=${Date.now() - t0}ms poolTopicId=${canonicalId} runId=${workflowRunId}`,
     );
     console.log(`${tag} RETURN status=miss totalElapsed=${Date.now() - t0}ms`);
     return {
       status: "miss",
       poolTopicId: canonicalId,
-      workflowRunId: canonicalId,
+      workflowRunId,
     };
   }
 
-  // LOSER — someone else's row was returned. Don't schedule a duplicate
-  // workflow. The caller can poll pool_topics.status for readiness.
+  // LOSER — someone else's row was returned. Decide whether the canonical
+  // row is a gravestone (failed / silently-dropped generating) that must
+  // be re-queued, a ready pool we should hit, or a legitimately-in-flight
+  // workflow we must not disturb.
+
+  // (d) canonical row is ready → the pool is usable. Reachable when the
+  // vector upsert lagged or was skipped, but D1 says the questions are
+  // persisted.
+  if (canonicalStatus === "ready") {
+    console.log(
+      `${tag} race=LOSER canonicalId=${canonicalId} status=ready — returning HIT from canonical`,
+    );
+    try {
+      const sampled = await sampleQuestions(
+        env,
+        canonicalId,
+        count,
+        reserveCount,
+        options.seed ?? canonicalId,
+      );
+      console.log(`${tag} RETURN status=hit totalElapsed=${Date.now() - t0}ms`);
+      return {
+        status: "hit",
+        poolTopicId: canonicalId,
+        questions: sampled.questions,
+        reservedQuestions: sampled.reservedQuestions,
+      };
+    } catch (err) {
+      // sampleQuestions throws if the pool has fewer rows than needed.
+      // Fall through to re-queue — treat as a gravestone.
+      console.warn(
+        `${tag} race=LOSER canonical status=ready but sampleQuestions threw (${String(err)}) — falling through to re-queue`,
+      );
+    }
+  }
+
+  // (b) canonical row is a gravestone OR (c) actively-generating.
+  //
+  // Gravestone rules:
+  //   - status='failed' → always re-queueable (no TTL check needed).
+  //   - status='generating' AND workflow_started_at IS NOT NULL AND
+  //     workflow_started_at < (now - POOL_GENERATING_STALENESS_MS)
+  //     → silently-dropped workflow; re-queueable.
+  //   - status='generating' AND workflow_started_at IS NULL AND
+  //     updated_at < (now - POOL_GENERATING_STALENESS_MS) seconds
+  //     → workflow never ran Step 0 in over 60s; silently-dropped at
+  //     scheduling layer; re-queueable. Falls back to updated_at so a
+  //     freshly-INSERTed row (just now, null started_at) is NOT treated
+  //     as stale by concurrent MISS callers — preserves T-04-10
+  //     race-dedup contract.
+  //
+  // Active-generating (NOT a gravestone, preserve existing LOSER behavior):
+  //   - status='generating' AND workflow_started_at IS NOT NULL AND fresh
+  //   - status='generating' AND workflow_started_at IS NULL AND updated_at fresh
+  //
+  // The re-queue itself is a compare-and-swap expressed in the UPDATE's
+  // WHERE clause. D1's meta.changes tells us whether we won. If we lost
+  // (two retry attempts racing), we re-read the row and return the current
+  // actual status honestly.
+  const staleCutoffMs = nowMs - POOL_GENERATING_STALENESS_MS;
+  const staleCutoffSec = nowSec - Math.floor(POOL_GENERATING_STALENESS_MS / 1000);
+  const startedAt = canonical.workflow_started_at;
+  const updatedAtSec = canonical.updated_at;
+
+  const isGravestone =
+    canonicalStatus === "failed" ||
+    (canonicalStatus === "generating" &&
+      ((startedAt !== null && startedAt < staleCutoffMs) ||
+        (startedAt === null && updatedAtSec < staleCutoffSec)));
+
+  if (isGravestone) {
+    console.log(
+      `${tag} race=LOSER canonicalId=${canonicalId} status=${canonicalStatus} startedAt=${startedAt ?? "null"} updatedAt=${updatedAtSec} — re-queue candidate (CAS)`,
+    );
+    // Fresh Workflows instance id per re-queue attempt — see debug session
+    // `battle-pool-requeue-silent`. The CAS UPDATE persists it so the live
+    // run is discoverable from the pool row.
+    const reQueueRunId = crypto.randomUUID();
+    const cas = await env.DB
+      .prepare(
+        `UPDATE battle_pool_topics
+            SET status = 'generating',
+                workflow_run_id = ?,
+                workflow_started_at = NULL,
+                updated_at = ?
+          WHERE id = ?
+            AND (
+              status = 'failed'
+              OR (
+                status = 'generating'
+                AND (
+                  (workflow_started_at IS NOT NULL AND workflow_started_at < ?)
+                  OR (workflow_started_at IS NULL AND updated_at < ?)
+                )
+              )
+            )`,
+      )
+      .bind(reQueueRunId, nowSec, canonicalId, staleCutoffMs, staleCutoffSec)
+      .run();
+    const changes = (cas as { meta?: { changes?: number } }).meta?.changes ?? 0;
+    console.log(`${tag} step=reQueue.cas DONE elapsed=${Date.now() - t0}ms changes=${changes}`);
+
+    if (changes > 0) {
+      // We won the CAS — we own the fresh workflow schedule. Pass the
+      // fresh runId (NOT canonicalId) as the Workflows instance id to
+      // avoid the terminal-state collision that made the previous run
+      // silently no-op in miniflare.
+      console.log(
+        `${tag} race=LOSER→REQUEUE winning CAS — scheduling workflow poolTopicId=${canonicalId} runId=${reQueueRunId}`,
+      );
+      await env.BATTLE_QUESTION_WORKFLOW.create({
+        id: reQueueRunId,
+        params: {
+          topic: normalized,
+          poolTopicId: canonicalId,
+          topicEmbedding,
+        },
+      });
+      console.log(
+        `${tag} step=reQueue.workflow.create DONE elapsed=${Date.now() - t0}ms poolTopicId=${canonicalId} runId=${reQueueRunId}`,
+      );
+      console.log(`${tag} RETURN status=miss (re-queued) totalElapsed=${Date.now() - t0}ms`);
+      return {
+        status: "miss",
+        poolTopicId: canonicalId,
+        workflowRunId: reQueueRunId,
+      };
+    }
+
+    // CAS lost — someone else beat us to the re-queue. Re-read the row
+    // and return the current actual status honestly.
+    console.log(`${tag} race=LOSER→REQUEUE lost CAS — someone else re-queued; re-reading`);
+    const recheck = await env.DB
+      .prepare(
+        `SELECT status, workflow_run_id FROM battle_pool_topics WHERE id = ?`,
+      )
+      .bind(canonicalId)
+      .first<{ status: string; workflow_run_id: string | null }>();
+    const recheckedRunId = recheck?.workflow_run_id ?? canonicalId;
+    if (recheck?.status === "ready") {
+      // Unlikely but handle gracefully — the other racer already finished.
+      try {
+        const sampled = await sampleQuestions(
+          env,
+          canonicalId,
+          count,
+          reserveCount,
+          options.seed ?? canonicalId,
+        );
+        console.log(`${tag} RETURN status=hit (post-CAS) totalElapsed=${Date.now() - t0}ms`);
+        return {
+          status: "hit",
+          poolTopicId: canonicalId,
+          questions: sampled.questions,
+          reservedQuestions: sampled.reservedQuestions,
+        };
+      } catch {
+        // fall through to generating
+      }
+    }
+    console.log(
+      `${tag} RETURN status=generating (post-CAS loss) totalElapsed=${Date.now() - t0}ms`,
+    );
+    return {
+      status: "generating",
+      poolTopicId: canonicalId,
+      workflowRunId: recheckedRunId,
+    };
+  }
+
+  // (c) actively-generating — someone else's workflow is in flight. Don't
+  // schedule a duplicate. Preserves T-04-10 race-dedup contract exercised
+  // by tests/battle/battle.pool.race.test.ts.
   console.log(
-    `${tag} race=LOSER canonicalId=${canonicalId} ours=${poolTopicId} — not scheduling duplicate`,
+    `${tag} race=LOSER canonicalId=${canonicalId} ours=${poolTopicId} status=generating fresh — not scheduling duplicate`,
   );
   console.log(`${tag} RETURN status=generating totalElapsed=${Date.now() - t0}ms`);
   return {

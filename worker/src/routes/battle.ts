@@ -839,6 +839,14 @@ battleRoutes.post(
     // prevention per T-04-gap-12).
     const topicEmbedding = await embedTopic(c.env, poolRow.topic);
 
+    // Fresh Workflows instance id per retry attempt. Reusing poolRow.id as
+    // the instance id silently no-ops in miniflare when the previous run
+    // is in a terminal state (and throws in production). Persist the new
+    // runId in battle_pool_topics.workflow_run_id so the response body can
+    // surface it and so future honest-status paths report the live run.
+    // See debug session `battle-pool-requeue-silent`.
+    const workflowRunId = crypto.randomUUID();
+
     // Reset pool state BEFORE firing the workflow so the new run's step-0
     // (markWorkflowStarted) can stamp cleanly and the staleness check
     // in a future retry works as expected.
@@ -847,13 +855,14 @@ battleRoutes.post(
       .update(schema.battlePoolTopics)
       .set({
         status: "generating",
+        workflowRunId,
         updatedAt: now,
       })
       .where(eq(schema.battlePoolTopics.id, poolRow.id));
     await nullWorkflowStartedAt(c.env, poolRow.id);
 
     await c.env.BATTLE_QUESTION_WORKFLOW.create({
-      id: poolRow.id,
+      id: workflowRunId,
       params: {
         topic: poolRow.topic,
         poolTopicId: poolRow.id,
@@ -865,7 +874,7 @@ battleRoutes.post(
       {
         status: "generating",
         restarted: true,
-        workflowRunId: poolRow.id,
+        workflowRunId,
       } satisfies PoolRetryResponse,
       202,
     );

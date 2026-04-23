@@ -52,13 +52,18 @@ describe("battle pool race — UNIQUE(topic) dedupes workflow creation (04-29)",
     const statuses = [a.status, b.status].sort();
     expect(statuses).toEqual(["generating", "miss"]);
 
-    // Winner's id matches the scheduled workflow id.
+    // Winner's workflowRunId (fresh UUID, decoupled from poolTopicId per
+    // debug battle-pool-requeue-silent) matches the scheduled workflow id.
     const winner = a.status === "miss" ? a : b;
-    expect(createdIds[0]).toBe(winner.poolTopicId);
+    if (winner.status !== "miss") throw new Error("winner must be miss");
+    expect(createdIds[0]).toBe(winner.workflowRunId);
+    expect(winner.workflowRunId).not.toBe(winner.poolTopicId);
 
-    // Loser's workflowRunId points at the winner too (status polling is 1:1).
+    // Loser's workflowRunId points at the SAME live workflow instance the
+    // winner scheduled — both read it from battle_pool_topics.workflow_run_id
+    // so client-side status polling converges on the same run.
     const loser = a.status === "generating" ? a : b;
-    expect(loser.workflowRunId).toBe(winner.poolTopicId);
+    expect(loser.workflowRunId).toBe(winner.workflowRunId);
 
     // Exactly one battle_pool_topics row exists for the topic (normalized form).
     const rows = await env.DB

@@ -257,22 +257,34 @@ describe("POST /api/battle/:id/pool/retry (04-40 / gap 04-12)", () => {
     };
     expect(body.status).toBe("generating");
     expect(body.restarted).toBe(true);
-    expect(body.workflowRunId).toBe(poolTopicId);
+    // Contract (debug battle-pool-requeue-silent): retry generates a FRESH
+    // Workflows instance id — never reuses poolTopicId — so the new run
+    // can't collide with the terminal previous instance.
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    expect(body.workflowRunId).toMatch(UUID_RE);
+    expect(body.workflowRunId).not.toBe(poolTopicId);
 
-    // D1 side-effects:
+    // D1 side-effects: workflow_run_id persisted as the fresh UUID,
+    // workflow_started_at nulled, status reset to 'generating'.
     const row = await env.DB.prepare(
-      `SELECT status, workflow_started_at FROM battle_pool_topics WHERE id = ?`,
+      `SELECT status, workflow_run_id, workflow_started_at FROM battle_pool_topics WHERE id = ?`,
     )
       .bind(poolTopicId)
-      .first<{ status: string; workflow_started_at: number | null }>();
+      .first<{
+        status: string;
+        workflow_run_id: string | null;
+        workflow_started_at: number | null;
+      }>();
     expect(row?.status).toBe("generating");
+    expect(row?.workflow_run_id).toBe(body.workflowRunId);
     expect(row?.workflow_started_at).toBeNull();
 
-    // Workflow was fired exactly once with the same id.
+    // Workflow was fired exactly once with the FRESH runId (NOT poolTopicId).
     // T-04-gap-12: the params.topic is re-read from the DB row (not the
     // request body), so we can assert the canonical topic value.
     expect(mock.getCalls()).toHaveLength(1);
-    expect(mock.getCalls()[0]?.id).toBe(poolTopicId);
+    expect(mock.getCalls()[0]?.id).toBe(body.workflowRunId);
     const firedParams = mock.getCalls()[0]?.params as {
       topic: string;
       poolTopicId: string;

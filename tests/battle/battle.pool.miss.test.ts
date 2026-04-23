@@ -42,12 +42,17 @@ describe("battle pool miss — triggers workflow (04-27)", () => {
     if (result.status !== "miss") return;
 
     expect(result.poolTopicId).toMatch(UUID_RE);
-    // Contract: workflowRunId === poolTopicId so status polling is 1:1.
-    expect(result.workflowRunId).toBe(result.poolTopicId);
+    // Contract (debug battle-pool-requeue-silent): workflowRunId is
+    // decoupled from poolTopicId — every workflow schedule attempt gets
+    // a FRESH UUID so miniflare/production never hits the duplicate-id
+    // code path (silent no-op locally, thrown error in prod).
+    expect(result.workflowRunId).toMatch(UUID_RE);
+    expect(result.workflowRunId).not.toBe(result.poolTopicId);
 
-    // Workflow was scheduled exactly once.
+    // Workflow was scheduled exactly once — with the fresh runId, NOT
+    // poolTopicId.
     expect(createCalls).toHaveLength(1);
-    expect(createCalls[0].id).toBe(result.poolTopicId);
+    expect(createCalls[0].id).toBe(result.workflowRunId);
 
     const params = createCalls[0].params as {
       topic: string;
@@ -85,7 +90,10 @@ describe("battle pool miss — triggers workflow (04-27)", () => {
 
     expect(row).toBeTruthy();
     expect(row!.status).toBe("generating");
-    expect(row!.workflow_run_id).toBe(result.poolTopicId);
+    // workflow_run_id column holds the decoupled Workflows instance id
+    // (NOT the poolTopicId). See debug battle-pool-requeue-silent.
+    expect(row!.workflow_run_id).toBe(result.workflowRunId);
+    expect(row!.workflow_run_id).not.toBe(result.poolTopicId);
     expect(row!.topic).toBe(rawTopic.trim().toLowerCase());
   });
 
