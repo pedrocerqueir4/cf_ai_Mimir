@@ -217,15 +217,24 @@ async function retryWithJitter<T>(
 // ─── Vectorize helpers ───────────────────────────────────────────────────────
 
 export async function embedTopic(env: Env, normalized: string): Promise<number[]> {
+  const t0 = Date.now();
+  console.log(`[embedTopic] START topic="${normalized}" model=${EMBEDDING_MODEL}`);
   const resp = (await retryWithJitter(() =>
     (env.AI.run as any)(EMBEDDING_MODEL, {
       text: [normalized],
     }),
   )) as { data: number[][] };
+  console.log(
+    `[embedTopic] env.AI.run returned elapsed=${Date.now() - t0}ms hasData=${!!resp?.data} len=${resp?.data?.[0]?.length ?? 0}`,
+  );
   const embedding = resp?.data?.[0];
   if (!embedding || embedding.length === 0) {
+    console.error(
+      `[embedTopic] FAILED topic="${normalized}" — empty embedding response`,
+    );
     throw new Error("Failed to generate topic embedding");
   }
+  console.log(`[embedTopic] OK topic="${normalized}" totalElapsed=${Date.now() - t0}ms`);
   return embedding;
 }
 
@@ -249,20 +258,30 @@ export async function findOrQueueTopic(
   rawTopic: string,
   options: FindOrQueueOptions = {},
 ): Promise<PoolLookupResult> {
+  const t0 = Date.now();
+  const tag = `[findOrQueueTopic raw="${rawTopic.slice(0, 40)}"]`;
+  console.log(`${tag} START count=${options.count ?? 5} reserve=${options.reserveCount ?? 5}`);
+
   const count = options.count ?? 5;
   const reserveCount = options.reserveCount ?? 5;
 
   // Normalize + safety check (T-04-09).
   const normalized = normalizeTopic(rawTopic);
   assertTopicSafe(normalized);
+  console.log(`${tag} step=normalize elapsed=${Date.now() - t0}ms normalized="${normalized}"`);
 
   // Embed topic.
+  console.log(`${tag} step=embed START`);
   const topicEmbedding = await embedTopic(env, normalized);
+  console.log(
+    `${tag} step=embed DONE elapsed=${Date.now() - t0}ms dims=${topicEmbedding.length}`,
+  );
 
   // Vectorize lookup in the battle-topics namespace. Wrapped in
   // retryWithJitter (gap 04-09) so a transient upstream failure does not
   // immediately surface as a user-facing 503; a single retry after a short
   // jittered backoff absorbs the vast majority of one-off flakes.
+  console.log(`${tag} step=vectorize.query START namespace=${BATTLE_TOPICS_NAMESPACE}`);
   const queryResult = (await retryWithJitter(() =>
     (env.VECTORIZE as any).query(topicEmbedding, {
       topK: 1,
@@ -276,6 +295,9 @@ export async function findOrQueueTopic(
       metadata?: Record<string, unknown>;
     }>;
   };
+  console.log(
+    `${tag} step=vectorize.query DONE elapsed=${Date.now() - t0}ms matches=${queryResult.matches?.length ?? 0} topScore=${queryResult.matches?.[0]?.score ?? "n/a"}`,
+  );
 
   const match = queryResult.matches?.[0];
 
@@ -283,15 +305,23 @@ export async function findOrQueueTopic(
     // HIT path — look up existing pool topic + its questions.
     const existingId =
       (match.metadata?.poolTopicId as string | undefined) ?? match.id;
+    console.log(
+      `${tag} branch=HIT score=${match.score} threshold=${POOL_SIMILARITY_THRESHOLD} existingId=${existingId}`,
+    );
 
     const db = drizzle(env.DB, { schema });
+    console.log(`${tag} step=hit.selectPoolRow START id=${existingId}`);
     const topicRow = await db
       .select()
       .from(schema.battlePoolTopics)
       .where(eq(schema.battlePoolTopics.id, existingId))
       .limit(1);
+    console.log(
+      `${tag} step=hit.selectPoolRow DONE elapsed=${Date.now() - t0}ms found=${topicRow.length > 0} status=${topicRow[0]?.status ?? "n/a"}`,
+    );
 
     if (topicRow.length > 0 && topicRow[0].status === "ready") {
+      console.log(`${tag} step=hit.sampleQuestions START`);
       const sampled = await sampleQuestions(
         env,
         existingId,
@@ -299,6 +329,10 @@ export async function findOrQueueTopic(
         reserveCount,
         options.seed ?? existingId,
       );
+      console.log(
+        `${tag} step=hit.sampleQuestions DONE elapsed=${Date.now() - t0}ms questions=${sampled.questions.length} reserves=${sampled.reservedQuestions.length}`,
+      );
+      console.log(`${tag} RETURN status=hit totalElapsed=${Date.now() - t0}ms`);
       return {
         status: "hit",
         poolTopicId: existingId,
@@ -310,12 +344,20 @@ export async function findOrQueueTopic(
     // Metadata claimed a hit but the D1 row is missing or not ready —
     // fall through to miss-path so we queue regeneration. This edge case
     // matters if a pool row is deleted but the vector index still holds it.
+    console.warn(
+      `${tag} HIT_FALLTHROUGH vector matched but D1 row not ready (found=${topicRow.length > 0}, status=${topicRow[0]?.status ?? "n/a"}) — falling through to MISS`,
+    );
+  } else {
+    console.log(
+      `${tag} branch=MISS (no match or score<=${POOL_SIMILARITY_THRESHOLD})`,
+    );
   }
 
   // MISS path — attempt to INSERT a new pool topic row, raced against
   // concurrent callers for the same normalized topic.
   const poolTopicId = crypto.randomUUID();
   const now = new Date();
+  console.log(`${tag} step=insertOrIgnore START attemptId=${poolTopicId}`);
 
   // Use raw SQL with INSERT OR IGNORE — Drizzle's onConflictDoNothing
   // requires a conflict target, and we want the global UNIQUE on (topic)
@@ -334,19 +376,25 @@ export async function findOrQueueTopic(
       Math.floor(now.getTime() / 1000),
     )
     .run();
+  console.log(`${tag} step=insertOrIgnore DONE elapsed=${Date.now() - t0}ms`);
 
   // Fall back: SELECT by topic to read the canonical row. Covers both the
   // "we inserted" case (row exists under poolTopicId) and the race loser
   // case (row exists under someone else's id).
+  console.log(`${tag} step=selectCanonical START`);
   const canonical = await env.DB
     .prepare(
       `SELECT id, workflow_run_id FROM battle_pool_topics WHERE topic = ?`,
     )
     .bind(normalized)
     .first<{ id: string; workflow_run_id: string | null }>();
+  console.log(
+    `${tag} step=selectCanonical DONE elapsed=${Date.now() - t0}ms canonicalId=${canonical?.id ?? "null"}`,
+  );
 
   if (!canonical) {
     // Extremely unlikely — insert succeeded but SELECT returned nothing.
+    console.error(`${tag} FAIL inconsistent state — INSERT succeeded but SELECT returned null`);
     throw new Error(
       `findOrQueueTopic: inconsistent state for topic "${normalized}"`,
     );
@@ -363,6 +411,8 @@ export async function findOrQueueTopic(
   // Cloudflare D1 runtime versions.
   if (canonicalId === poolTopicId) {
     // WINNER — schedule the workflow.
+    console.log(`${tag} race=WINNER scheduling workflow id=${canonicalId}`);
+    console.log(`${tag} step=workflow.create START`);
     await env.BATTLE_QUESTION_WORKFLOW.create({
       id: canonicalId,
       params: {
@@ -371,6 +421,10 @@ export async function findOrQueueTopic(
         topicEmbedding,
       },
     });
+    console.log(
+      `${tag} step=workflow.create DONE elapsed=${Date.now() - t0}ms runId=${canonicalId}`,
+    );
+    console.log(`${tag} RETURN status=miss totalElapsed=${Date.now() - t0}ms`);
     return {
       status: "miss",
       poolTopicId: canonicalId,
@@ -380,6 +434,10 @@ export async function findOrQueueTopic(
 
   // LOSER — someone else's row was returned. Don't schedule a duplicate
   // workflow. The caller can poll pool_topics.status for readiness.
+  console.log(
+    `${tag} race=LOSER canonicalId=${canonicalId} ours=${poolTopicId} — not scheduling duplicate`,
+  );
+  console.log(`${tag} RETURN status=generating totalElapsed=${Date.now() - t0}ms`);
   return {
     status: "generating",
     poolTopicId: canonicalId,
