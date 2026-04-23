@@ -245,19 +245,7 @@ api.use("/api/auth/sign-up/email", async (c, next) => {
 api.on(["GET", "POST"], "/api/auth/*", async (c) => {
   const auth = getOrCreateAuth(c.env, c.req.url);
   try {
-    const authRes = await auth.handler(c.req.raw);
-    // Materialize the body before returning. Better Auth's response body is a
-    // ReadableStream created inside the Workers V8 context. Returning the raw
-    // Response object causes workerd to crash when it tries to serialize 4xx
-    // responses back through Miniflare's dispatchFetch — the connection is
-    // closed before a valid HTTP response is sent (manifests as "fetch failed"
-    // at Miniflare). Reading the body as text and constructing a fresh Response
-    // gives workerd a plain string body it can reliably transmit.
-    const body = await authRes.text();
-    return new Response(body, {
-      status: authRes.status,
-      headers: authRes.headers,
-    });
+    return await auth.handler(c.req.raw);
   } catch (err) {
     console.error("[auth] handler error:", String(err));
     return c.json({ error: "Internal server error" }, 500);
