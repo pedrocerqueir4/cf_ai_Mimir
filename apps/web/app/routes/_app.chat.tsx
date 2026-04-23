@@ -482,15 +482,23 @@ export default function ChatPage() {
     textarea.style.height = `${Math.min(textarea.scrollHeight, 96)}px`;
   }, [input]);
 
+  // NOTE: completion/failure intentionally do NOT mutate activeGenerations.
+  // GenerationProgressBubble owns its own `isComplete` / `isFailed` state and
+  // swaps its own render between "steps", "failed", and "ready + View roadmap
+  // button" views. Removing the entry here would unmount the bubble in the
+  // same commit that it decides to show the success/failure UI (its render
+  // is gated on `activeGenerations.find(...)` in the map below), so the user
+  // would never see the completion state. Leave the entry in place for the
+  // lifetime of the message — it naturally disappears when history is reset.
   const handleGenerationComplete = useCallback(
-    (generationId: string, roadmapId: string) => {
-      setActiveGenerations((prev) => prev.filter((g) => g.id !== generationId));
+    (_generationId: string, _roadmapId: string) => {
+      // no-op: bubble stays mounted to display the success state
     },
     []
   );
 
-  const handleGenerationFailed = useCallback((generationId: string) => {
-    setActiveGenerations((prev) => prev.filter((g) => g.id !== generationId));
+  const handleGenerationFailed = useCallback((_generationId: string) => {
+    // no-op: bubble stays mounted to display the failure state
   }, []);
 
   const handleSend = useCallback(async () => {
