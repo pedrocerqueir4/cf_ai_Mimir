@@ -2,13 +2,20 @@ import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 
 // ─── Content Pipeline Tables (Phase 2) ───────────────────────────────────────
 
+// NOTE: `createdAt` is stored as unix MILLISECONDS (mode: "timestamp_ms"),
+// not unix seconds like other tables. Chat inserts within a single request
+// (user message → roadmap ack → streamed reply) use 1 ms offsets to
+// preserve strict ordering; second-precision would collapse them into
+// identical values and leave SQLite's ORDER BY created_at with an
+// ambiguous tie-break. Historical second-precision rows were multiplied
+// by 1000 in migration 0008.
 export const chatMessages = sqliteTable("chat_messages", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   conversationId: text("conversation_id").notNull(),
   role: text("role", { enum: ["user", "assistant"] }).notNull(),
   content: text("content").notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });
 
 export const roadmaps = sqliteTable("roadmaps", {
