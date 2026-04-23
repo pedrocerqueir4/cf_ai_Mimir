@@ -20,6 +20,21 @@ export const roadmaps = sqliteTable("roadmaps", {
   status: text("status", { enum: ["generating", "complete", "failed"] }).notNull().default("generating"),
   workflowRunId: text("workflow_run_id"),
   nodesJson: text("nodes_json").notNull().default("[]"),
+  // Progress step written by ContentGenerationWorkflow as each major phase
+  // completes. Read by GET /api/chat/status/:workflowRunId → returned as
+  // `step` in the response so the /chat progress bubble can advance its
+  // 3-icon indicator. Semantics (matches UI labels in _app.chat.tsx
+  // GENERATION_STEPS):
+  //   0 = row not yet created by workflow (status endpoint returns 404 anyway)
+  //   1 = roadmap structure built, lessons are generating       → UI icon 1 spinning
+  //   2 = lessons done, quizzes + embeddings generating         → UI icon 2 spinning
+  //   3 = everything generated, marking complete (or complete)  → UI icon 3 spinning / done
+  // The UI computes `activeStep = step - 1`, so step=1 → icon index 0 active.
+  // Column was added by migration 0002_current_step.sql — this Drizzle
+  // declaration just exposes the existing column to the ORM. Default `0`
+  // keeps pre-existing roadmap rows readable via the ORM; new rows inserted
+  // by ContentGenerationWorkflow explicitly set `currentStep: 1`.
+  currentStep: integer("current_step").notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });

@@ -127,6 +127,16 @@ export interface GenerationStatus {
   step?: 1 | 2 | 3;
 }
 
+// Cursor-paginated chat history page.
+// `messages` is chronological (oldest first) so the caller can prepend older
+// pages to the top of their list without re-sorting. `nextCursor` is the ISO
+// timestamp to pass as `?before=` on the next request, or null if no more pages.
+export interface ChatHistoryPage {
+  messages: ChatMessage[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
 // ─── Chat ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -155,13 +165,26 @@ export async function sendChatMessage(
 }
 
 /**
- * Fetch all messages in a conversation.
+ * Fetch one page of a conversation's history, newest-first page cursor.
+ *
+ * Call with no `before` to get the most recent page (up to `limit` messages).
+ * The returned `messages` array is in chronological order (oldest first in the
+ * page) so older pages can be prepended to the rendered list without sorting.
+ *
+ * To load older messages, pass the previous response's `nextCursor` as `before`.
+ * When `hasMore` is false, there are no older messages to load.
  */
 export async function fetchConversationMessages(
-  conversationId: string
-): Promise<ChatMessage[]> {
+  conversationId: string,
+  options: { before?: string; limit?: number } = {}
+): Promise<ChatHistoryPage> {
+  const params = new URLSearchParams();
+  if (options.before) params.set("before", options.before);
+  if (options.limit) params.set("limit", String(options.limit));
+  const qs = params.toString();
+
   const response = await fetch(
-    `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
+    `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages${qs ? `?${qs}` : ""}`,
     {
       credentials: "include",
     }
@@ -171,7 +194,7 @@ export async function fetchConversationMessages(
     throw new Error(`Failed to fetch messages: ${response.status}`);
   }
 
-  return response.json() as Promise<ChatMessage[]>;
+  return response.json() as Promise<ChatHistoryPage>;
 }
 
 /**

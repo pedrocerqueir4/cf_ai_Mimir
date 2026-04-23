@@ -172,6 +172,10 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
 
     try {
       // ── Step 1: generate-roadmap ────────────────────────────────────────────
+      // On insert we stamp `currentStep: 1` — the row becoming visible IS the
+      // signal to the /chat GenerationProgressBubble that "analyzing topic"
+      // (icon 1) is now the active step. Before this insert the status GET
+      // returns 404 and the UI's local state keeps icon 1 spinning anyway.
       console.log(`[Workflow] Step 1: generate-roadmap — calling AI for topic="${topic}"`);
       roadmapId = await step.do(
         "generate-roadmap",
@@ -215,6 +219,9 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
             complexity: validated.complexity,
             status: "generating",
             workflowRunId,
+            // Icon 1 ("Analyzing topic...") is the initial active step.
+            // We advance to 2 once lesson generation actually begins below.
+            currentStep: 1,
             nodesJson: JSON.stringify(validated.nodes),
             createdAt: now,
             updatedAt: now,
@@ -262,6 +269,21 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
           return parsed;
         },
       );
+
+      // ── Advance progress to 2: "Building roadmap..." complete, now lessons ──
+      // This is a cheap dedicated step so Cloudflare Workflows can idempotently
+      // skip it on replay. We don't roll this into the lesson loop because the
+      // loop body is one step per lesson — we want the UI to tick over to icon 2
+      // exactly once, at the START of lesson generation, regardless of how many
+      // nodes there are.
+      await step.do("advance-step-to-lessons", async () => {
+        const db = drizzle(this.env.DB, { schema });
+        await db
+          .update(schema.roadmaps)
+          .set({ currentStep: 2, updatedAt: new Date() })
+          .where(eq(schema.roadmaps.id, roadmapId!));
+        console.log(`[Workflow] Progress: currentStep=2 (lessons phase)`);
+      });
 
       // ── Step 2b: generate-lesson-{nodeId} (per lesson) ─────────────────────
       const lessonIds: string[] = [];
@@ -351,6 +373,20 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
       }
 
       console.log(`[Workflow] All lessons generated: ${lessonIds.length} lessons`);
+
+      // ── Advance progress to 3: lessons done, quizzes + embeddings running ──
+      // Icon 3 ("Generating lessons..." per UI GENERATION_STEPS) lights up as
+      // active. From here on, the user sees all three icons engaged; the final
+      // transition to "complete" flips the bubble into its success state with
+      // the "View roadmap" button.
+      await step.do("advance-step-to-quizzes", async () => {
+        const db = drizzle(this.env.DB, { schema });
+        await db
+          .update(schema.roadmaps)
+          .set({ currentStep: 3, updatedAt: new Date() })
+          .where(eq(schema.roadmaps.id, roadmapId!));
+        console.log(`[Workflow] Progress: currentStep=3 (quizzes + embeddings phase)`);
+      });
 
       // ── Step 3: generate-quiz-{lessonId} (per lesson) ──────────────────────
       for (let idx = 0; idx < lessonIds.length; idx++) {
@@ -529,6 +565,9 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
       console.log(`[Workflow] All embeddings complete for ${lessonIds.length} lessons`);
 
       // ── Step 5: mark-complete ──────────────────────────────────────────────
+      // Leave currentStep=3 (icon 3 done); the UI's `status === "complete"`
+      // branch force-sets activeStep=3 and swaps to the "View roadmap" button,
+      // so currentStep's final value no longer matters once status flips.
       console.log(`[Workflow] Step 5: mark-complete — roadmapId="${roadmapId}"`);
       await step.do("mark-complete", async () => {
         const db = drizzle(this.env.DB, { schema });

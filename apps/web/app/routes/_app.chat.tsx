@@ -8,7 +8,12 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "~/components/ui/avatar";
 
 import { useChatStore } from "~/stores/chat-store";
-import { sendChatMessage, pollGenerationStatus } from "~/lib/api-client";
+import {
+  sendChatMessage,
+  pollGenerationStatus,
+  fetchConversationMessages,
+  type ChatMessage as ApiChatMessage,
+} from "~/lib/api-client";
 import { randomId } from "~/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -26,6 +31,73 @@ interface LocalMessage {
   isGenerationFailed?: boolean;
   workflowRunId?: string;
   roadmapId?: string;
+}
+
+// ─── Conversation persistence (scope-clarification: single running conv.) ────
+
+// localStorage key for the most-recent conversationId. Not user-scoped here
+// because better-auth sessions already enforce per-user isolation on the
+// backend (GET /conversations/:id/messages returns 404 if the id doesn't
+// belong to the signed-in user). If an old id leaks across sign-outs on a
+// shared device, the rehydrate fetch simply 404s and we mint a fresh id.
+const CONVERSATION_STORAGE_KEY = "mimir.chat.conversationId";
+const HISTORY_PAGE_SIZE = 50;
+
+function readStoredConversationId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(CONVERSATION_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredConversationId(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CONVERSATION_STORAGE_KEY, id);
+  } catch {
+    // localStorage blocked (private mode, quota) — degrade gracefully; the
+    // conversation still works for this session, just won't survive reload.
+  }
+}
+
+/**
+ * Map a persisted D1 ChatMessage row → the client's LocalMessage shape.
+ *
+ * Assistant messages whose content is a JSON blob of shape
+ *   { type: "generation_started", workflowRunId, topic }
+ * are rehydrated into `isGenerationProgress` bubbles so the UI re-enters the
+ * polling flow and shows either the live step indicator or the "View roadmap"
+ * completed state (handled by GenerationProgressBubble's query on mount).
+ */
+function rehydrateMessage(row: ApiChatMessage): LocalMessage {
+  if (row.role === "assistant" && row.content.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(row.content) as {
+        type?: string;
+        workflowRunId?: string;
+      };
+      if (parsed.type === "generation_started" && parsed.workflowRunId) {
+        return {
+          id: row.id,
+          role: "assistant",
+          content: "",
+          createdAt: row.createdAt,
+          isGenerationProgress: true,
+          workflowRunId: parsed.workflowRunId,
+        };
+      }
+    } catch {
+      // Not JSON — fall through to plain-text rendering below.
+    }
+  }
+  return {
+    id: row.id,
+    role: row.role,
+    content: row.content,
+    createdAt: row.createdAt,
+  };
 }
 
 // ─── Generation Progress Bubble ───────────────────────────────────────────────
@@ -244,9 +316,30 @@ export default function ChatPage() {
     Array<{ id: string; workflowRunId: string }>
   >([]);
 
+  // History-pagination state. `hasMore` gates whether the top sentinel tries
+  // to fetch. `nextCursor` is the `?before=<iso>` value for the next request,
+  // populated from the previous page's oldest `createdAt`.
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const conversationId = useRef<string>(randomId());
+  const topSentinelRef = useRef<HTMLDivElement>(null);
+
+  // Restore existing conversationId from storage (survives reload) or mint
+  // a fresh one. Do this synchronously via useRef's initializer so the first
+  // render has a stable id; storage write happens immediately.
+  const conversationId = useRef<string>(
+    (() => {
+      const stored = readStoredConversationId();
+      if (stored) return stored;
+      const fresh = randomId();
+      writeStoredConversationId(fresh);
+      return fresh;
+    })()
+  );
 
   const { setConversationId, setStreaming: setStoreStreaming } = useChatStore();
 
@@ -255,10 +348,131 @@ export default function ChatPage() {
     setConversationId(conversationId.current);
   }, [setConversationId]);
 
-  // Auto-scroll to bottom on new message
+  // Initial history fetch on mount. This is the write-side that closes the
+  // "chat history not persistent" bug: /chat route now actually asks the
+  // server for the saved conversation before declaring the list empty.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const page = await fetchConversationMessages(conversationId.current, {
+          limit: HISTORY_PAGE_SIZE,
+        });
+        if (cancelled) return;
+        const hydrated = page.messages.map(rehydrateMessage);
+        setMessages(hydrated);
+        setHasMoreHistory(page.hasMore);
+        setNextCursor(page.nextCursor);
+
+        // Any rehydrated generation bubbles must be re-registered as active
+        // generations so GenerationProgressBubble renders (via the
+        // activeGenerations.find guard in the map below).
+        const resumedGenerations = hydrated
+          .filter((m) => m.isGenerationProgress && m.workflowRunId)
+          .map((m) => ({ id: m.id, workflowRunId: m.workflowRunId as string }));
+        if (resumedGenerations.length > 0) {
+          setActiveGenerations(resumedGenerations);
+        }
+      } catch {
+        // 404 (no such conversation yet on server) or network error — leave
+        // messages empty so the user sees the normal empty-state prompt and
+        // can start a new conversation. Conversation id is already persisted
+        // so their NEXT message creates the row and subsequent reloads will
+        // load fine.
+      } finally {
+        if (!cancelled) setHistoryLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Load-older-messages handler. Uses the stored `nextCursor` to fetch the
+  // next page and PREPENDS it (older on top). Measures scroll-height delta
+  // before/after to preserve the user's current scroll position — otherwise
+  // prepending content jumps the viewport to the top.
+  const loadOlder = useCallback(async () => {
+    if (!nextCursor || !hasMoreHistory || loadingOlder) return;
+    setLoadingOlder(true);
+
+    // Capture current scroll anchor (the first existing top message)
+    const scrollRoot = topSentinelRef.current?.parentElement;
+    const prevHeight = scrollRoot?.scrollHeight ?? 0;
+    const prevScroll = scrollRoot?.scrollTop ?? 0;
+
+    try {
+      const page = await fetchConversationMessages(conversationId.current, {
+        before: nextCursor,
+        limit: HISTORY_PAGE_SIZE,
+      });
+      const hydrated = page.messages.map(rehydrateMessage);
+
+      setMessages((prev) => [...hydrated, ...prev]);
+      setHasMoreHistory(page.hasMore);
+      setNextCursor(page.nextCursor);
+
+      // Rehydrate any progress bubbles from the older page too
+      const newResumed = hydrated
+        .filter((m) => m.isGenerationProgress && m.workflowRunId)
+        .map((m) => ({ id: m.id, workflowRunId: m.workflowRunId as string }));
+      if (newResumed.length > 0) {
+        setActiveGenerations((prev) => [...newResumed, ...prev]);
+      }
+
+      // Restore scroll position after DOM updates by aligning scrollTop to
+      // the same visual anchor. Use a microtask / rAF so layout flushes first.
+      requestAnimationFrame(() => {
+        if (!scrollRoot) return;
+        const newHeight = scrollRoot.scrollHeight;
+        scrollRoot.scrollTop = prevScroll + (newHeight - prevHeight);
+      });
+    } catch {
+      // Silent — the sentinel will try again on the next intersection.
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [nextCursor, hasMoreHistory, loadingOlder]);
+
+  // IntersectionObserver on the top sentinel → fires loadOlder when the
+  // user scrolls near the top of the list. Re-created when dependencies
+  // change so the observer always calls the latest loadOlder closure.
+  useEffect(() => {
+    const el = topSentinelRef.current;
+    if (!el) return;
+    if (!historyLoaded || !hasMoreHistory) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            void loadOlder();
+          }
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [historyLoaded, hasMoreHistory, loadOlder]);
+
+  // Auto-scroll to bottom only when a NEW message is appended (not when an
+  // older page is prepended). We detect by tracking the last message's id.
+  const lastMessageIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const lastId = messages[messages.length - 1]?.id ?? null;
+    if (lastId && lastId !== lastMessageIdRef.current) {
+      // Only scroll if this change was at the tail, not the head
+      const prevLast = lastMessageIdRef.current;
+      lastMessageIdRef.current = lastId;
+      // Skip initial hydration jump by checking historyLoaded sentinel:
+      // first load sets messages + historyLoaded together in the same tick,
+      // and we want the list to land at the bottom. Allow that scroll.
+      if (prevLast !== null || messages.length > 0) {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  }, [messages]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -446,7 +660,25 @@ export default function ChatPage() {
       {/* Message list */}
       <ScrollArea className="flex-1">
         <div className="px-4 py-4 pb-24 lg:pb-6">
-          {messages.length === 0 ? (
+          {/* Top sentinel — fires loadOlder when visible. Rendered only when
+              there's more history to avoid an observer on an unused node. */}
+          {hasMoreHistory && (
+            <div
+              ref={topSentinelRef}
+              aria-hidden="true"
+              className="flex h-8 items-center justify-center"
+            >
+              {loadingOlder && (
+                <Loader2
+                  size={16}
+                  className="animate-spin text-muted-foreground"
+                  aria-hidden="true"
+                />
+              )}
+            </div>
+          )}
+
+          {historyLoaded && messages.length === 0 ? (
             /* Empty state */
             <div className="flex h-[calc(100vh-12rem)] items-center justify-center">
               <div className="max-w-sm text-center">
