@@ -471,8 +471,19 @@ function BattlePreInner({
 
   const handleCountdownComplete = useCallback(async () => {
     setPhase("starting");
+    // /api/battle/:id/start is host-only (returns 403 for the guest and 409
+    // if the host's request already flipped the battle to 'active'). Both
+    // clients reach this handler at countdown-end, so branching here is
+    // what keeps the guest out of the error pane. The guest navigates
+    // straight to /battle/room/:id; the BattleRoom DO's `handleHello`
+    // snapshot + subsequent `question` broadcast drive the guest from
+    // pre-battle → active on their WS connection. See debug session
+    // `battle-guest-disconnect-start`.
+    const isHost = lobby != null && lobby.hostId === currentUserId;
     try {
-      await startBattle(battleId);
+      if (isHost) {
+        await startBattle(battleId);
+      }
       navigate(`/battle/room/${encodeURIComponent(battleId)}`, {
         state: { battleId },
       });
@@ -487,7 +498,7 @@ function BattlePreInner({
       );
       setPhase("error");
     }
-  }, [battleId, navigate]);
+  }, [battleId, currentUserId, lobby, navigate]);
 
   // ─── Derived data for the reveals ────────────────────────────────────
   const revealData = useMemo(() => {
