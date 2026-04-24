@@ -1,5 +1,7 @@
 # Mimir
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 > An AI-powered, gamified micro-learning platform that turns any topic into an adaptive roadmap of bite-sized lessons, quizzes, and real-time multiplayer battles — built end-to-end on Cloudflare.
 
 <!-- TODO: add screenshot -->
@@ -159,7 +161,6 @@ cf_ai_Mimir/
 │   └── wrangler.jsonc     # API Worker bindings
 ├── packages/shared/       # Cross-worker/web shared schemas (Zod)
 ├── tests/                 # Vitest integration tests (auth, content, gamification, qa, security, xp, battle/*)
-├── .planning/             # GSD workflow artifacts (ROADMAP, REQUIREMENTS, STATE, phases/)
 ├── drizzle.config.ts      # Drizzle Kit config (SQLite dialect, worker schema)
 └── package.json           # Workspace root (test script only)
 ```
@@ -312,15 +313,14 @@ npx wrangler d1 migrations apply mimir-db --remote --config apps/web/wrangler.js
 
 ## Project Status
 
-Milestone v1 is executing through four phases (plus one inserted integration-fix phase). Status pulled from `.planning/REQUIREMENTS.md` and `.planning/ROADMAP.md`.
+Milestone v1 is executing across four feature areas:
 
-| Phase                                    | Plans Complete | Status       |
-| ---------------------------------------- | -------------- | ------------ |
-| 01. Foundation (auth + security)         | 4 / 5          | In progress  |
-| 02. AI Content Pipeline (roadmaps + RAG) | 10 / 11        | In progress  |
-| 02.1 Cross-Phase Integration Fixes       | 2 / 2          | Complete     |
-| 03. Gamification                         | 5 / 5 (plans)  | Implemented  |
-| 04. Multiplayer Battles                  | 8 / 9          | In progress  |
+| Area                                      | Status       |
+| ----------------------------------------- | ------------ |
+| 01. Foundation (auth + security)          | In progress  |
+| 02. AI Content Pipeline (roadmaps + RAG)  | In progress  |
+| 03. Gamification                          | Implemented  |
+| 04. Multiplayer Battles                   | In progress  |
 
 ### v1 requirement coverage
 
@@ -334,7 +334,7 @@ Milestone v1 is executing through four phases (plus one inserted integration-fix
 | Gamification             | 0    | 6     |
 | Multiplayer              | 2    | 5     |
 
-Gamification and several multiplayer requirements are implemented in code (per phase 03 and 04 plans) but still pending final verification checkpoints in `REQUIREMENTS.md`.
+Gamification and several multiplayer requirements are implemented in code but still pending final verification.
 
 ---
 
@@ -357,22 +357,18 @@ See `CLAUDE.md` for the full security constraint list and threat surface.
 
 ---
 
-## Contributing / Workflow
+## Contributing
 
-This repository uses the **GSD (Get Stuff Done)** workflow. Planning artifacts live under `.planning/` (ROADMAP, REQUIREMENTS, STATE, per-phase plans and validations) and must stay in sync with code changes.
+Contributions are welcome. Please open an issue to discuss substantial changes before submitting a pull request. For small fixes, a PR against `master` is fine.
 
-Entry points:
+Before opening a PR:
 
-- `/gsd:quick` — small fixes, doc updates, ad-hoc tasks
-- `/gsd:debug` — investigation and bug fixing
-- `/gsd:execute-phase` — planned phase work
-
-Direct repo edits outside a GSD workflow are discouraged unless explicitly requested. Additional per-phase context lives under `.planning/phases/NN-*/`.
+- Run `npm test` from the repo root and confirm the Vitest suite passes.
+- Run `npm run typecheck` in `apps/web` and confirm no new errors.
+- Keep commits atomic and use conventional-commit prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `test:`).
 
 ---
 
 ## License
 
-<!-- Add LICENSE file and update this section -->
-
-No license file is present in the repository yet. Add a `LICENSE` file at the project root and update this section before publishing.
+Mimir is released under the [MIT License](./LICENSE) — free for personal, commercial, and derivative use, with attribution.
