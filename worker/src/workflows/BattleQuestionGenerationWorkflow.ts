@@ -4,9 +4,13 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import {
-  BATTLE_QUIZ_JSON_SCHEMA,
+  BATTLE_QUIZ_CHUNK_COUNT,
+  BATTLE_QUIZ_CHUNK_SIZE,
+  BATTLE_QUIZ_CHUNK_THEMES,
+  BattleQuizChunkOutputSchema,
   BattleQuizOutputSchema,
-  buildBattleQuizSystemPrompt,
+  buildBattleQuizChunkJsonSchema,
+  buildBattleQuizChunkSystemPrompt,
 } from "../validation/battle-prompts";
 import { BATTLE_TOPICS_NAMESPACE } from "../services/battle-pool";
 
@@ -22,6 +26,11 @@ export type BattlePoolPayload = {
 // 8B-fast supports json_schema response_format (the -fp8 variant does not).
 // Short, structured quiz output — no long Markdown inside string values.
 const MODEL_QUIZ = "@cf/meta/llama-3.1-8b-instruct-fast" as const;
+
+// Workers AI defaults max_tokens to 256 for llama-3.1-8b-instruct-fast, which
+// truncates a 5-question json_schema payload mid-string (root cause of debug
+// session battle-qgen-parse-and-504). 2048 leaves ~2× headroom per chunk.
+const BATTLE_QUIZ_MAX_TOKENS = 2048;
 
 // ─── AI Response Parser ──────────────────────────────────────────────────────
 // Copied from ContentGenerationWorkflow.ts (lines 80-162) so the battle
@@ -89,12 +98,46 @@ function parseAIResponse(aiResponse: unknown): unknown {
 // mock env; the workflow's `run()` composes them so the production behavior
 // and the test behavior share the exact same code.
 
+async function generateQuestionChunk(
+  env: Env,
+  topic: string,
+  count: number,
+  chunkLabel: string,
+): Promise<unknown[]> {
+  const aiResp = await (env.AI.run as any)(MODEL_QUIZ, {
+    messages: [
+      {
+        role: "system",
+        content: buildBattleQuizChunkSystemPrompt(topic, count, chunkLabel),
+      },
+      {
+        role: "user",
+        content: `Generate ${count} quiz questions about: ${topic}`,
+      },
+    ],
+    max_tokens: BATTLE_QUIZ_MAX_TOKENS,
+    response_format: {
+      type: "json_schema",
+      json_schema: buildBattleQuizChunkJsonSchema(count),
+    },
+  });
+
+  const parsed = parseAIResponse(aiResp);
+  const validated = BattleQuizChunkOutputSchema.parse(parsed);
+  return validated.questions;
+}
+
 /**
  * Step 1 body — generate 20 questions and persist each row.
  *
  * Store-in-step pattern (D-10): writes individual rows inside the step and
  * returns only the question ids to keep the step output payload under the
  * 1MiB Workflows limit.
+ *
+ * Generation uses chunked fan-out (4 × 5 questions in parallel) because a
+ * single 20-question call to @cf/meta/llama-3.1-8b-instruct-fast hits the
+ * default `max_tokens=256` ceiling and truncates mid-string. See debug
+ * session battle-qgen-parse-and-504 (2026-04-23).
  */
 export async function generateAndStoreBattleQuestions(
   env: Env,
@@ -103,19 +146,27 @@ export async function generateAndStoreBattleQuestions(
   const { topic, poolTopicId } = payload;
   const db = drizzle(env.DB, { schema });
 
-  const aiResp = await (env.AI.run as any)(MODEL_QUIZ, {
-    messages: [
-      { role: "system", content: buildBattleQuizSystemPrompt(topic) },
-      { role: "user", content: `Generate 20 quiz questions about: ${topic}` },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: BATTLE_QUIZ_JSON_SCHEMA,
-    },
-  });
+  // Parallel fan-out — 4 chunks of 5 questions each. Promise.all short-
+  // circuits on the first chunk that throws; the surrounding step.do
+  // retry policy then re-runs the entire generation (not just the failing
+  // chunk). This is intentional: a partial pool would violate D-09's
+  // "exactly 20" invariant.
+  const chunkResults = await Promise.all(
+    Array.from({ length: BATTLE_QUIZ_CHUNK_COUNT }, (_, i) =>
+      generateQuestionChunk(
+        env,
+        topic,
+        BATTLE_QUIZ_CHUNK_SIZE,
+        BATTLE_QUIZ_CHUNK_THEMES[i] ?? "general understanding",
+      ),
+    ),
+  );
 
-  const parsed = parseAIResponse(aiResp);
-  const validated = BattleQuizOutputSchema.parse(parsed);
+  // Merge and validate exactly 20 — reuses the existing D-09 guard so the
+  // downstream contract is unchanged.
+  const validated = BattleQuizOutputSchema.parse({
+    questions: chunkResults.flat(),
+  });
 
   const ids: string[] = [];
   for (let i = 0; i < validated.questions.length; i++) {
@@ -266,9 +317,6 @@ export class BattleQuestionGenerationWorkflow extends WorkflowEntrypoint<
         },
         async () => {
           await markWorkflowStarted(this.env, poolTopicId);
-          console.log(
-            `[BattleQuestionGenerationWorkflow] Step 0: DONE — workflow_started_at stamped for poolTopicId="${poolTopicId}"`,
-          );
         },
       );
 
@@ -316,18 +364,12 @@ export class BattleQuestionGenerationWorkflow extends WorkflowEntrypoint<
             topicEmbedding,
             questionCount: questionIds.length,
           });
-          console.log(
-            `[BattleQuestionGenerationWorkflow] Step 2: DONE — vector upserted for poolTopicId="${poolTopicId}"`,
-          );
         },
       );
 
       // ── Step 3: mark pool entry ready ────────────────────────────────────
       await step.do("mark-pool-ready", async () => {
         await markPoolTopicReady(this.env, poolTopicId);
-        console.log(
-          `[BattleQuestionGenerationWorkflow] Step 3: DONE — poolTopicId="${poolTopicId}" ready`,
-        );
       });
 
       console.log(
@@ -340,9 +382,6 @@ export class BattleQuestionGenerationWorkflow extends WorkflowEntrypoint<
       );
       try {
         await markPoolTopicFailed(this.env, poolTopicId);
-        console.log(
-          `[BattleQuestionGenerationWorkflow] Marked poolTopicId="${poolTopicId}" as failed`,
-        );
       } catch (statusErr) {
         console.error(
           "[BattleQuestionGenerationWorkflow] failed to mark status=failed",

@@ -16,6 +16,10 @@ import {
 // Test approach (Option B per plan): each step body is exported as a
 // standalone helper from the workflow module. We exercise those helpers
 // against a mocked env — same code the workflow runs in production.
+//
+// Generation note (debug battle-qgen-parse-and-504): generateAndStoreBattleQuestions
+// now fans out 4 chunked AI calls of 5 questions each. The mock below returns
+// a 5-question chunk per call so the merged total is 20.
 
 function buildMockQuestions(count = 20) {
   const questions: Array<{
@@ -56,6 +60,40 @@ function buildMockQuestions(count = 20) {
   return { questions };
 }
 
+/**
+ * Build a Workers-AI mock that returns a 5-question chunk per invocation.
+ * Each call gets questions with unique text/ids so the 4 merged chunks don't
+ * collide on correctness sanity checks.
+ */
+function buildChunkedAIMock() {
+  let callIndex = 0;
+  return {
+    run: async (model: string, _opts: unknown) => {
+      if (!model.includes("llama-3.1-8b")) {
+        throw new Error(`Unmocked model: ${model}`);
+      }
+      const offset = callIndex * 5;
+      callIndex += 1;
+      const chunkQuestions = Array.from({ length: 5 }, (_, i) => {
+        const n = offset + i;
+        return {
+          questionText: `MCQ question ${n}`,
+          questionType: "mcq" as const,
+          options: [
+            { id: "opt-a", text: "Alpha" },
+            { id: "opt-b", text: "Bravo" },
+            { id: "opt-c", text: "Charlie" },
+            { id: "opt-d", text: "Delta" },
+          ],
+          correctOptionId: "opt-b",
+          explanation: `Explanation for MCQ ${n}.`,
+        };
+      });
+      return { response: JSON.stringify({ questions: chunkQuestions }) };
+    },
+  };
+}
+
 describe("BattleQuestionGenerationWorkflow populates pool (04-30)", () => {
   beforeAll(async () => {
     await setupD1();
@@ -76,17 +114,7 @@ describe("BattleQuestionGenerationWorkflow populates pool (04-30)", () => {
       .bind(poolTopicId, `${topic}-${poolTopicId}`, poolTopicId, now, now)
       .run();
 
-    const mockResponse = buildMockQuestions(20);
-    const mockAI = {
-      run: async (model: string, _opts: unknown) => {
-        if (model.includes("llama-3.1-8b")) {
-          return { response: JSON.stringify(mockResponse) };
-        }
-        throw new Error(`Unmocked model: ${model}`);
-      },
-    };
-
-    const testEnv = { ...env, AI: mockAI } as unknown as Env;
+    const testEnv = { ...env, AI: buildChunkedAIMock() } as unknown as Env;
 
     const ids = await generateAndStoreBattleQuestions(testEnv, {
       topic,
@@ -213,9 +241,7 @@ describe("BattleQuestionGenerationWorkflow populates pool (04-30)", () => {
       .bind(poolTopicId, `${topic}-${poolTopicId}`, poolTopicId, now, now)
       .run();
 
-    const mockAI = {
-      run: async () => ({ response: JSON.stringify(buildMockQuestions(20)) }),
-    };
+    const mockAI = buildChunkedAIMock();
     const upsertCalls: unknown[] = [];
     const mockVectorize = {
       upsert: async (v: unknown[]) => {
@@ -261,3 +287,7 @@ describe("BattleQuestionGenerationWorkflow populates pool (04-30)", () => {
     expect(quizRows?.c).toBe(20);
   });
 });
+
+// Keep `buildMockQuestions` as a legacy helper in case other suites import it
+// (it's unused by this file's suites after the chunked-mock refactor).
+void buildMockQuestions;
