@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
@@ -39,12 +39,8 @@ const PRESET_ROADMAPS: RoadmapListItem[] = BATTLE_STARTER_TOPICS.map(
 
 export default function BattleJoinPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
 
-  const [joinCode, setJoinCode] = useState<string>(() => {
-    const fromQuery = searchParams.get("code")?.toUpperCase() ?? "";
-    return fromQuery.replace(/[^A-Z0-9]/g, "").slice(0, JOIN_CODE_LENGTH);
-  });
+  const [joinCode, setJoinCode] = useState<string>("");
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<string | null>(
     null,
   );

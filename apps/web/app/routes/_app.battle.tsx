@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
@@ -27,7 +27,6 @@ function isLeaderboardWindow(v: string | null): v is LeaderboardWindow {
 
 export default function BattlePage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
 
   const rawTab = searchParams.get("tab");
   const activeTab: TopTab = isTopTab(rawTab) ? rawTab : "create";
@@ -36,18 +35,6 @@ export default function BattlePage() {
   const activeWindow: LeaderboardWindow = isLeaderboardWindow(rawWindow)
     ? rawWindow
     : "week";
-
-  const code = searchParams.get("code");
-
-  // Share intent: if a ?code= is present and tab is not explicitly "leaderboard",
-  // route the user into the join flow with the prefilled code.
-  useEffect(() => {
-    if (code && activeTab !== "join") {
-      navigate(`/battle/join?code=${encodeURIComponent(code)}`, {
-        replace: true,
-      });
-    }
-  }, [code, activeTab, navigate]);
 
   const handleTabChange = (value: string) => {
     const next = new URLSearchParams(searchParams);

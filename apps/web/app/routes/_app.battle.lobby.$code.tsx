@@ -7,7 +7,7 @@ import {
   useNavigate,
   useParams,
 } from "react-router";
-import { Check, ChevronLeft, Copy, Share2 } from "lucide-react";
+import { Check, ChevronLeft, Copy } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -84,19 +84,11 @@ function LobbyInner({
   const [copied, setCopied] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [showShare, setShowShare] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Plan 04-11, Task 4: need current user id so ParticipantCard can flag
   // the "(you)" marker on the right slot.
   const { data: session } = useSession();
   const currentUserId = session?.user?.id ?? null;
-
-  useEffect(() => {
-    setShowShare(
-      typeof navigator !== "undefined" &&
-        typeof navigator.share === "function",
-    );
-  }, []);
 
   const {
     data: lobby,
@@ -162,22 +154,6 @@ function LobbyInner({
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     };
   }, []);
-
-  const handleShare = useCallback(async () => {
-    if (!displayCode) return;
-    const url = `${window.location.origin}/battle/join?code=${encodeURIComponent(displayCode)}`;
-    try {
-      await navigator.share({
-        title: "Join my battle",
-        text: `Join my battle with code ${displayCode}`,
-        url,
-      });
-    } catch (err) {
-      // Users pressing "cancel" on the share sheet throws AbortError — ignore.
-      if ((err as DOMException)?.name === "AbortError") return;
-      toast.error("Couldn't open the share sheet.");
-    }
-  }, [displayCode]);
 
   const handleConfirmCancel = useCallback(async () => {
     if (cancelling) return;
@@ -277,16 +253,6 @@ function LobbyInner({
           )}
         </Button>
 
-        {showShare && (
-          <Button
-            variant="outline"
-            onClick={handleShare}
-            className="min-h-12 w-full"
-          >
-            <Share2 className="h-4 w-4 mr-2" aria-hidden="true" />
-            Share
-          </Button>
-        )}
       </div>
 
       {/* Plan 04-11, Task 4: Participants (host + guest) as ParticipantCard
