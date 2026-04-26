@@ -962,17 +962,34 @@ export class BattleRoom extends DurableObject<Env> {
       // (3) XP mutations — only added when there's a real transfer.
       // SQL expression `xp = xp ± ?` is the atomic increment pattern
       // (no read-modify-write race). D-19 allows negative XP — no floor
-      // constraint on this column.
+      // constraint on this column. UPSERT (INSERT ... ON CONFLICT DO UPDATE)
+      // is required because user_stats rows are NOT seeded on signup —
+      // they're only created on first lesson complete / first quiz answer
+      // (worker/src/routes/roadmaps.ts:386, :490). A user who battles before
+      // completing any lesson has no row, and a plain UPDATE silently
+      // no-ops in SQLite/D1 (gap closed by 04-16-PLAN; see
+      // .planning/debug/xp-transfer-not-reflected-in-profile.md).
       if (xpTransferred > 0 && winnerId && loserId) {
+        const settledAtSec = Math.floor(nowMs / 1000);
         stmts.push(
           this.env.DB.prepare(
-            "UPDATE user_stats SET xp = xp - ?, updated_at = ? WHERE user_id = ?",
-          ).bind(xpTransferred, Math.floor(nowMs / 1000), loserId),
+            `INSERT INTO user_stats
+               (user_id, xp, lessons_completed, questions_correct, current_streak, longest_streak, updated_at)
+               VALUES (?, ?, 0, 0, 0, 0, ?)
+             ON CONFLICT(user_id) DO UPDATE SET
+               xp = xp - ?,
+               updated_at = ?`,
+          ).bind(loserId, -xpTransferred, settledAtSec, xpTransferred, settledAtSec),
         );
         stmts.push(
           this.env.DB.prepare(
-            "UPDATE user_stats SET xp = xp + ?, updated_at = ? WHERE user_id = ?",
-          ).bind(xpTransferred, Math.floor(nowMs / 1000), winnerId),
+            `INSERT INTO user_stats
+               (user_id, xp, lessons_completed, questions_correct, current_streak, longest_streak, updated_at)
+               VALUES (?, ?, 0, 0, 0, 0, ?)
+             ON CONFLICT(user_id) DO UPDATE SET
+               xp = xp + ?,
+               updated_at = ?`,
+          ).bind(winnerId, xpTransferred, settledAtSec, xpTransferred, settledAtSec),
         );
       }
 
