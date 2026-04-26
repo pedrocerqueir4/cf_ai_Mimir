@@ -140,12 +140,17 @@ export function SlotMachineReel<T extends SlotMachineReelItemBase>({
   const finalItem = items[safeFinalIndex];
 
   // The reel is a vertical list. We want items[finalIndex] to land in the
-  // CENTER row of the visible 3-row window → translateY = -(finalIndex - 1) * itemHeight.
-  const finalY = -(safeFinalIndex - 1) * itemHeight;
-  // During phase 1 we over-travel by several revolutions so the reel visibly
-  // spins before settling. items.length × itemHeight × SPIN_REVOLUTIONS.
-  const phase1Y =
-    finalY - items.length * itemHeight * SPIN_REVOLUTIONS;
+  // CENTER row of the visible 3-row window. The strip is rendered
+  // (SPIN_REVOLUTIONS + 1) times so the rendered column is tall enough to
+  // fill the visible window throughout the spin — phase 1 lands on the LAST
+  // copy's safeFinalIndex so items remain visible from the first frame to
+  // the last. translateY = -(SPIN_REVOLUTIONS * items.length + finalIndex - 1) * itemHeight.
+  const finalY =
+    -(SPIN_REVOLUTIONS * items.length + safeFinalIndex - 1) * itemHeight;
+  // Phase 1 ends at the same y as the settled position. Phase 2 still does
+  // its overshoot via the keyframe `y: [finalY - OVERSHOOT_PX, finalY]` so
+  // the spring lands cleanly without losing the bounce.
+  const phase1Y = finalY;
 
   const containerHeight = itemHeight * 3;
   const ariaLabel = settled && finalItem
@@ -270,15 +275,21 @@ export function SlotMachineReel<T extends SlotMachineReelItemBase>({
         initial={{ y: 0, filter: "blur(0px)" }}
         style={{ willChange: "transform" }}
       >
-        {items.map((item, i) => (
-          <div
-            key={`${item.id}-${i}`}
-            style={{ height: itemHeight }}
-            className="flex w-full items-center justify-center"
-          >
-            {renderItem(item, settled && i === safeFinalIndex)}
-          </div>
-        ))}
+        {Array.from({ length: SPIN_REVOLUTIONS + 1 }, (_, copy) =>
+          items.map((item, i) => {
+            const isLastCopyWinner =
+              copy === SPIN_REVOLUTIONS && i === safeFinalIndex;
+            return (
+              <div
+                key={`${item.id}-${copy}-${i}`}
+                style={{ height: itemHeight }}
+                className="flex w-full items-center justify-center"
+              >
+                {renderItem(item, settled && isLastCopyWinner)}
+              </div>
+            );
+          }),
+        )}
       </motion.div>
     </ActiveRowBand>
   );
