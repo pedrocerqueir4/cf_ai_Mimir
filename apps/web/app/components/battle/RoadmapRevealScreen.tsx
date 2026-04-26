@@ -41,7 +41,7 @@ export interface RoadmapRevealScreenProps {
 // of the visible area at the final offset."
 const REEL_LENGTH = 40;
 const FINAL_INDEX = 37;
-const POST_SETTLE_ADVANCE_MS = 500;
+const POST_SETTLE_ADVANCE_MS = 750;
 
 /**
  * Build the reel item list. The pool alternates (host, guest, decoys) so each

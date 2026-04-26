@@ -37,7 +37,7 @@ export interface WagerRevealScreenProps {
 
 const REEL_LENGTH = 40;
 const FINAL_INDEX = 37;
-const POST_SETTLE_ADVANCE_MS = 500;
+const POST_SETTLE_ADVANCE_MS = 750;
 
 function buildWagerReelItems({
   hostTier,
