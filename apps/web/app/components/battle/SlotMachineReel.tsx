@@ -59,9 +59,9 @@ export interface SlotMachineReelProps<T extends SlotMachineReelItemBase> {
 
 const PHASE_1_DURATION_S = 1.2;
 const PHASE_2_DURATION_S = 0.8;
-const IDLE_HOLD_MS = 1_000;
+const IDLE_HOLD_MS = 1_500;
 const REDUCED_MOTION_FADE_MS = 200;
-const REDUCED_MOTION_HOLD_MS = 800;
+const REDUCED_MOTION_HOLD_MS = 1_400;
 const OVERSHOOT_PX = 16;
 const SPIN_REVOLUTIONS = 4; // number of full item-list revolutions before landing
 
