@@ -28,18 +28,20 @@ export default function AppLayout() {
   const reducedMotion = useReducedMotion();
 
   // UI-SPEC § 5.1 motion `page-transition`:
-  //   full motion: 180ms ease-soft, opacity crossfade (popLayout mode)
-  //   reduced motion: 100ms opacity-only
-  // popLayout overlaps exit + enter so there's no blank-screen gap between
-  // pages — the previous "mode=wait + y:8 slide" produced a perceptible blink
-  // because the old page's exit fully completed before the new page mounted.
-  const pageVariants = {
-    initial: { opacity: 0 },
-    animate: { opacity: 1 },
-    exit: { opacity: 0 },
-  };
+  //   full motion: 240ms ease-soft, opacity + 6px upward slide (popLayout)
+  //   reduced motion: 120ms opacity-only
+  // popLayout overlaps exit + enter so there's no blank-screen gap. The
+  // small y translate keeps the motion legible without layout shift —
+  // pure opacity-only at 180ms reads as instant on mobile tab nav.
+  const pageVariants = reducedMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    : {
+        initial: { opacity: 0, y: 6 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -6 },
+      };
   const transition = {
-    duration: reducedMotion ? 0.1 : 0.18,
+    duration: reducedMotion ? 0.12 : 0.24,
     ease: [0.4, 0, 0.2, 1] as const,
   };
 
