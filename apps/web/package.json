@@ -12,6 +12,8 @@
     "typecheck": "npm run cf-typegen && react-router typegen && tsc -b"
   },
   "dependencies": {
+    "@fontsource/rubik": "^5.2.8",
+    "@fontsource/rubik-mono-one": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
     "@libsql/client": "^0.17.2",
     "@marsidev/react-turnstile": "^1.5.0",
