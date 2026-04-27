@@ -1,6 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { useEffect } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useSession } from "~/lib/auth-client";
 import { AppShell } from "~/components/layout/AppShell";
 import { handleSessionExpiry } from "~/lib/session";
@@ -25,25 +24,17 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const immersive = isImmersivePath(location.pathname);
-  const reducedMotion = useReducedMotion();
-
-  // UI-SPEC § 5.1 motion `page-transition`:
-  //   full motion: 240ms ease-soft, opacity + 6px upward slide (popLayout)
-  //   reduced motion: 120ms opacity-only
-  // popLayout overlaps exit + enter so there's no blank-screen gap. The
-  // small y translate keeps the motion legible without layout shift —
-  // pure opacity-only at 180ms reads as instant on mobile tab nav.
-  const pageVariants = reducedMotion
-    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
-    : {
-        initial: { opacity: 0, y: 6 },
-        animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, y: -6 },
-      };
-  const transition = {
-    duration: reducedMotion ? 0.12 : 0.24,
-    ease: [0.4, 0, 0.2, 1] as const,
-  };
+  // Page-level transitions intentionally disabled. Three iterations with
+  // framer-motion AnimatePresence (mode=wait, mode=popLayout, opacity-only)
+  // produced perceptible flicker on tab nav — React Router 7 commits the new
+  // route's Outlet content before AnimatePresence's initial state applies,
+  // so the new page paints once at full opacity then re-animates from y:6.
+  // Active-tab indicator change in BottomNav/SidebarNav already provides the
+  // visual feedback for navigation. Phase 06 design language lives in
+  // per-component motion (button press, list-stagger, celebrations).
+  // DEVIATION from UI-SPEC § 5.1 page-transition — flagged for Plan 6 polish
+  // to revisit via React Router 7's native viewTransition API (CSS view
+  // transitions avoid the framer-motion paint-flash).
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -68,18 +59,7 @@ export default function AppLayout() {
 
   return (
     <AppShell immersive={immersive}>
-      <AnimatePresence mode="popLayout" initial={false}>
-        <motion.div
-          key={location.pathname}
-          variants={pageVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          transition={transition}
-        >
-          <Outlet />
-        </motion.div>
-      </AnimatePresence>
+      <Outlet />
     </AppShell>
   );
 }
