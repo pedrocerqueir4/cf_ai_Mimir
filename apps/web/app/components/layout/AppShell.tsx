@@ -31,16 +31,23 @@ export function AppShell({ children, immersive = false }: AppShellProps) {
     <div className="flex min-h-screen bg-background">
       <SidebarNav />
       <div className="flex flex-1 flex-col">
-        {/* Mobile header */}
-        <header className="flex items-center justify-end border-b border-border p-4 lg:hidden">
-          <ThemeToggle />
-        </header>
-        {/* Desktop header */}
-        <header className="hidden items-center justify-end border-b border-border p-4 lg:flex">
-          <ThemeToggle />
+        {/*
+          Mobile-only top status bar (UI-SPEC § App Shell — 56px frosted sticky):
+          MIMIR wordmark left + ThemeToggle right.
+          On lg+ the SidebarNav owns the wordmark + ThemeToggle (in the user block),
+          so this header collapses entirely (PATTERNS.md AppShell template lines 597-657).
+        */}
+        <header
+          className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[hsl(var(--border))] bg-[var(--bg-frosted)] px-4 backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card lg:hidden"
+          aria-label="Top status bar"
+        >
+          <span className="font-display text-lg tracking-tight text-foreground">MIMIR</span>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+          </div>
         </header>
         <main className="flex-1 pb-20 lg:pb-4">
-          <div className="mx-auto w-full max-w-[640px] px-4 pt-4">
+          <div className="mx-auto w-full max-w-[640px] px-4 pt-4 lg:max-w-[960px]">
             {children}
           </div>
         </main>
