@@ -1,5 +1,6 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { useEffect } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useSession } from "~/lib/auth-client";
 import { AppShell } from "~/components/layout/AppShell";
 import { handleSessionExpiry } from "~/lib/session";
@@ -24,6 +25,24 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const immersive = isImmersivePath(location.pathname);
+  const reducedMotion = useReducedMotion();
+
+  // UI-SPEC § 5.1 motion `page-transition`:
+  //   full motion: 200ms ease-soft, opacity 0→1 + translateY 8px→0
+  //   reduced motion: 120ms opacity-only, no translate
+  // Direct child of <AnimatePresence> must be the keyed <motion.div> so
+  // pathname changes are visible to AnimatePresence (RESEARCH.md Pitfall 3).
+  const pageVariants = reducedMotion
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    : {
+        initial: { opacity: 0, y: 8 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -8 },
+      };
+  const transition = {
+    duration: reducedMotion ? 0.12 : 0.2,
+    ease: [0.4, 0, 0.2, 1] as const,
+  };
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -48,7 +67,18 @@ export default function AppLayout() {
 
   return (
     <AppShell immersive={immersive}>
-      <Outlet />
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={location.pathname}
+          variants={pageVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={transition}
+        >
+          <Outlet />
+        </motion.div>
+      </AnimatePresence>
     </AppShell>
   );
 }
