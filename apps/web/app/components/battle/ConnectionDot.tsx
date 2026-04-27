@@ -1,3 +1,4 @@
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "~/lib/utils";
 
 export type ConnectionDotState =
@@ -17,32 +18,57 @@ const LABEL_BY_STATE: Record<ConnectionDotState, string> = {
 };
 
 /**
- * 8px circular status dot (UI-SPEC §Score display pattern — Connection
- * indicator). Three states:
+ * Phase 06 Plan 03 — UI-SPEC § Battle Room ConnectionDot.
  *
- * - `connected` → `bg-muted-foreground` (neutral; the expected state does
- *   not burn the accent colour).
- * - `reconnecting` → `bg-amber-500` (Tailwind default preset; the ONLY
- *   non-token colour in Phase 4, justified in UI-SPEC §Score display).
- * - `forfeit-imminent` → `bg-destructive animate-pulse` (used when the
- *   30s grace window is more than two-thirds elapsed — Plan 08 wires the
- *   time-based transition).
+ * Token-driven palette:
+ *   - `connected` → emerald `--success` with `connection-pulse` motion
+ *     (2s linear loop, opacity 1→0.6→1). Reduced motion: static dot.
+ *   - `reconnecting` → ruby `--destructive` (jewel palette swap from the
+ *     legacy `bg-amber-500`).
+ *   - `forfeit-imminent` → ruby `--destructive` with destructive-soft
+ *     halo pulse to escalate the visual urgency.
  *
  * `aria-label` carries the human-readable state so the colour isn't the
- * only signal (UI-SPEC §Accessibility Baseline — Colour-only signal rule).
+ * only signal (UI-SPEC §Accessibility — Colour-only signal rule).
  */
 export function ConnectionDot({ state, className }: ConnectionDotProps) {
+  const prefersReducedMotion = useReducedMotion();
+
   const colourClass =
     state === "connected"
-      ? "bg-muted-foreground"
+      ? "bg-[hsl(var(--success))]"
       : state === "reconnecting"
-        ? "bg-amber-500"
-        : "bg-destructive animate-pulse";
+        ? "bg-[hsl(var(--destructive))]"
+        : "bg-[hsl(var(--destructive))]";
+
+  // UI-SPEC § Motion `connection-pulse` — 2s linear loop on the connected
+  // state. Reduced motion: pulse disabled (static dot).
+  const pulseAnim =
+    state === "connected" && !prefersReducedMotion
+      ? {
+          opacity: [1, 0.6, 1],
+          transition: {
+            duration: 2,
+            repeat: Infinity,
+            ease: "linear" as const,
+          },
+        }
+      : state === "forfeit-imminent" && !prefersReducedMotion
+        ? {
+            opacity: [1, 0.5, 1],
+            transition: {
+              duration: 0.8,
+              repeat: Infinity,
+              ease: [0.4, 0, 0.6, 1] as const,
+            },
+          }
+        : undefined;
 
   return (
-    <span
+    <motion.span
       role="status"
       aria-label={LABEL_BY_STATE[state]}
+      animate={pulseAnim}
       className={cn(
         "inline-block h-2 w-2 rounded-full",
         colourClass,

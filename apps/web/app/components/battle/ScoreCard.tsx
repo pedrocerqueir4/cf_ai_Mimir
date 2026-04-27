@@ -23,20 +23,19 @@ interface ScoreCardProps {
 }
 
 /**
- * Per-player score card (UI-SPEC §Score display pattern).
+ * Phase 06 Plan 03 — UI-SPEC § Battle Room ScoreCard:
+ *   - Score number renders in `mono-num` (Rubik Mono One, tabular-nums) so
+ *     digit width is stable during the count-up.
+ *   - Self side highlights with `--dominant-soft` background + `--dominant`
+ *     border to read as the active player without burning the amethyst on
+ *     the opponent card.
+ *   - Name + side label use `body-sm` (14/1.5) in `--fg-muted`.
  *
- * - Height: 80px mobile / 96px desktop.
- * - Self: accent border (`border-2 border-primary`) + 2px accent ring on
- *   the avatar.
- * - Opponent: neutral border (`border border-border`).
- * - Score renders at Display size (28/40, weight 600) + `tabular-nums` so
- *   the digits don't jitter during the count-up.
- * - Count-up is a framer-motion spring (`stiffness: 100, damping: 20`) —
- *   per UI-SPEC: "running tally updates AFTER each question resolves"
- *   (on reveal), NOT per-millisecond. Rendering real-time would leak
- *   opponent state.
- * - ConnectionDot positioned top-right via absolute positioning so it
- *   doesn't shift the main row on state changes.
+ * Phase 04 contracts preserved verbatim:
+ *   - Spring-driven count-up (only triggered on `score` prop change, which
+ *     fires per-question `reveal` per UI-SPEC).
+ *   - ConnectionDot positioned absolutely top-right; doesn't shift the row.
+ *   - Server-authoritative scoring untouched (SEC-06).
  */
 export function ScoreCard({
   user,
@@ -62,14 +61,16 @@ export function ScoreCard({
     <Card
       className={cn(
         "relative flex h-20 w-full items-center gap-3 px-4 py-2 lg:h-24",
-        isSelf ? "border-2 border-primary" : "border border-border",
+        isSelf
+          ? "border-2 border-[hsl(var(--dominant))] bg-[hsl(var(--dominant-soft))]"
+          : "border border-[hsl(var(--border))]",
       )}
     >
       {/* Avatar */}
       <Avatar
         className={cn(
           "h-8 w-8 shrink-0",
-          isSelf && "ring-2 ring-primary",
+          isSelf && "ring-2 ring-[hsl(var(--dominant))]",
         )}
       >
         {user.image ? (
@@ -82,18 +83,20 @@ export function ScoreCard({
       <div className="min-w-0 flex-1">
         <p
           className={cn(
-            "truncate text-base leading-tight",
-            isSelf ? "text-primary font-semibold" : "text-foreground",
+            "truncate text-[14px] font-normal leading-[1.5]",
+            isSelf
+              ? "text-[hsl(var(--dominant))] font-semibold"
+              : "text-[hsl(var(--fg-muted))]",
           )}
         >
           {displayName}
         </p>
       </div>
 
-      {/* Score — Display role, tabular-nums, count-up via framer-motion. */}
+      {/* Score — `mono-num` Rubik Mono One; count-up via framer-motion. */}
       <motion.span
         aria-label={`${displayName} score`}
-        className="text-[28px] font-semibold tabular-nums leading-none lg:text-[40px]"
+        className="font-display tabular-nums text-[28px] leading-[1.15] lg:text-[36px] lg:leading-[1.1] text-foreground"
       >
         {rounded}
       </motion.span>

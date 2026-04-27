@@ -95,7 +95,7 @@ export function ReconnectOverlay({
   return (
     <DialogPrimitive.Root open={open}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[var(--bg-overlay)] backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <DialogPrimitive.Content
           // All three escape hatches disabled — the user CANNOT dismiss.
           onEscapeKeyDown={(e) => e.preventDefault()}
@@ -103,32 +103,33 @@ export function ReconnectOverlay({
           onInteractOutside={(e) => e.preventDefault()}
           className={cn(
             "fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-xs -translate-x-1/2 -translate-y-1/2",
-            "rounded-lg border bg-card p-6 shadow-lg",
+            "rounded-[var(--radius-lg)] border border-[hsl(var(--border))] bg-[hsl(var(--bg-elevated))] p-6 shadow-[var(--shadow-lg)]",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
           )}
         >
           <div className="flex flex-col items-center gap-4 text-center">
             <Loader2
-              className="h-10 w-10 animate-spin text-primary"
+              className="h-10 w-10 animate-spin text-[hsl(var(--dominant))]"
               aria-hidden="true"
             />
-            <DialogPrimitive.Title className="text-xl font-semibold leading-tight">
+            <DialogPrimitive.Title className="text-[22px] font-semibold leading-[1.25] -tracking-[0.005em] text-foreground">
               {isSelfDisconnect
                 ? "Reconnecting\u2026"
                 : `${opponentName || "Opponent"} disconnected`}
             </DialogPrimitive.Title>
-            <DialogPrimitive.Description className="text-base text-muted-foreground">
+            <DialogPrimitive.Description className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]">
               {isSelfDisconnect
                 ? "Don\u2019t close this tab. We\u2019re restoring the battle."
                 : "Waiting for them to reconnect. The battle is paused."}
             </DialogPrimitive.Description>
             <p
               className={cn(
-                "text-sm tabular-nums",
+                "text-[14px] tabular-nums leading-[1.5]",
                 seconds <= 10
-                  ? "text-destructive"
-                  : "text-muted-foreground",
+                  ? "text-[hsl(var(--destructive))]"
+                  : "text-[hsl(var(--fg-muted))]",
               )}
               aria-live="polite"
             >

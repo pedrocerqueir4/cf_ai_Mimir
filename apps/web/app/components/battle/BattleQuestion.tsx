@@ -1,4 +1,5 @@
 import { CheckCircle, XCircle } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { Card } from "~/components/ui/card";
 import { cn } from "~/lib/utils";
 import type { CurrentQuestion } from "~/stores/battle-store";
@@ -21,18 +22,15 @@ interface BattleQuestionProps {
 }
 
 /**
- * Battle-room question panel. Reuses the visual grammar of
- * `components/lesson/QuizQuestion.tsx` (radio-style circle + text, accent
- * border + CheckCircle on correct, destructive border + XCircle on wrong,
- * dim to 50% opacity on non-selected options once answered) with three
- * battle-specific deviations:
+ * Phase 06 Plan 03 — UI-SPEC § Battle Room question panel.
  *
- * 1. Question text renders at Heading 20/600 (not Body 16/400) — battle
- *    places the question in the visual focal point.
- * 2. After lock, before reveal: render "Waiting for {opponentName}…" where
- *    the lesson-variant renders the correct-answer explanation.
- * 3. NO explanation rendered on reveal. Explanation slows pacing; battle
- *    is velocity-focused. NO XP toast per question — wager is the reward.
+ * Reuses inline-quiz motion vocabulary (`quiz-correct` halo pulse +
+ * `quiz-wrong` translateX shake) on the user's selected chip post-reveal.
+ * Light + dark in lockstep via `--success-soft` / `--destructive-soft`
+ * tokens. All gated on `useReducedMotion()`.
+ *
+ * Server-authoritative scoring + atomic answer submission preserved
+ * verbatim (Phase 04 SEC-06 lock).
  */
 export function BattleQuestion({
   question,
@@ -42,15 +40,45 @@ export function BattleQuestion({
   opponentName,
   onSelect,
 }: BattleQuestionProps) {
+  const prefersReducedMotion = useReducedMotion();
   const isRevealed = revealCorrectOptionId != null;
   const isInteractive = !isAnswered;
 
-  function getOptionStyle(optionId: string): string {
+  // UI-SPEC § Motion `quiz-correct` — emerald halo pulse.
+  const correctAnim = prefersReducedMotion
+    ? undefined
+    : {
+        boxShadow: [
+          "0 0 0 0 rgba(52, 211, 153, 0)",
+          "0 0 24px 4px rgba(52, 211, 153, 0.45)",
+          "0 0 0 0 rgba(52, 211, 153, 0)",
+        ],
+        transition: {
+          duration: 0.32,
+          ease: [0.34, 1.56, 0.64, 1] as const,
+        },
+      };
+
+  // UI-SPEC § Motion `quiz-wrong` — translateX shake.
+  const wrongAnim = prefersReducedMotion
+    ? undefined
+    : {
+        x: [-4, 4, -2, 2, 0],
+        transition: {
+          duration: 0.2,
+          ease: [0.2, 0.8, 0.2, 1] as const,
+        },
+      };
+
+  function getOptionClasses(optionId: string): string {
     const base =
-      "flex items-center gap-3 w-full min-h-[52px] px-4 py-3 rounded-lg border transition-colors text-left";
+      "flex w-full min-h-12 items-center gap-3 rounded-[var(--radius-md)] border bg-card px-4 py-3 text-left text-[16px] font-medium leading-[1.5] transition-colors";
 
     if (!isAnswered) {
-      return `${base} border-border bg-card hover:bg-muted/50 cursor-pointer`;
+      return cn(
+        base,
+        "border-[hsl(var(--border))] hover:bg-[hsl(var(--bg-subtle))] hover:border-[hsl(var(--border-strong))] cursor-pointer",
+      );
     }
 
     const isSelected = mySelectedOptionId === optionId;
@@ -59,29 +87,43 @@ export function BattleQuestion({
     // Pre-reveal (answered but server hasn't revealed yet): selected
     // option sits on a neutral dim background; others go pointer-events-none.
     if (!isRevealed) {
-      return `${base} border-border bg-card pointer-events-none ${
-        isSelected ? "opacity-80" : "opacity-50"
-      }`;
+      return cn(
+        base,
+        "border-[hsl(var(--border))] pointer-events-none",
+        isSelected ? "opacity-80" : "opacity-50",
+      );
     }
 
-    // Post-reveal: paint correct/wrong borders per QuizQuestion pattern.
+    // Post-reveal: paint correct/wrong tokens.
     if (isSelected && isCorrectOption) {
-      return `${base} border-primary bg-card pointer-events-none`;
+      return cn(
+        base,
+        "border-[hsl(var(--success))] bg-[hsl(var(--success-soft))] text-[hsl(var(--success))] pointer-events-none",
+      );
     }
     if (isSelected && !isCorrectOption) {
-      return `${base} border-destructive bg-card pointer-events-none`;
+      return cn(
+        base,
+        "border-[hsl(var(--destructive))] bg-[hsl(var(--destructive-soft))] text-[hsl(var(--destructive))] pointer-events-none",
+      );
     }
     if (!isSelected && isCorrectOption) {
-      return `${base} border-primary bg-card pointer-events-none`;
+      return cn(
+        base,
+        "border-[hsl(var(--success))] bg-[hsl(var(--success-soft))] text-[hsl(var(--success))] pointer-events-none",
+      );
     }
-    return `${base} border-border bg-card pointer-events-none opacity-50`;
+    return cn(
+      base,
+      "border-[hsl(var(--border))] pointer-events-none opacity-50",
+    );
   }
 
   function getOptionIcon(optionId: string) {
     if (!isAnswered || !isRevealed) {
       return (
         <span
-          className="h-5 w-5 shrink-0 rounded-full border-2 border-muted-foreground"
+          className="h-5 w-5 shrink-0 rounded-full border-2 border-[hsl(var(--border-strong))]"
           aria-hidden="true"
         />
       );
@@ -93,7 +135,7 @@ export function BattleQuestion({
     if (isCorrectOption) {
       return (
         <CheckCircle
-          className="h-5 w-5 shrink-0 text-primary"
+          className="h-5 w-5 shrink-0 text-[hsl(var(--success))]"
           aria-hidden="true"
         />
       );
@@ -101,14 +143,14 @@ export function BattleQuestion({
     if (isSelected && !isCorrectOption) {
       return (
         <XCircle
-          className="h-5 w-5 shrink-0 text-destructive"
+          className="h-5 w-5 shrink-0 text-[hsl(var(--destructive))]"
           aria-hidden="true"
         />
       );
     }
     return (
       <span
-        className="h-5 w-5 shrink-0 rounded-full border-2 border-muted-foreground opacity-50"
+        className="h-5 w-5 shrink-0 rounded-full border-2 border-[hsl(var(--border))] opacity-50"
         aria-hidden="true"
       />
     );
@@ -116,10 +158,10 @@ export function BattleQuestion({
 
   return (
     <Card className="p-4">
-      {/* Question text — Heading 20/600 per battle-room deviation from lesson QuizQuestion */}
-      <p className="mb-4 text-xl font-semibold leading-snug">
+      {/* Question text — h2 22/1.25/600 centered max-w-600 per UI-SPEC. */}
+      <h2 className="mx-auto mb-4 max-w-[600px] text-center text-[22px] font-semibold leading-[1.25] -tracking-[0.005em] text-foreground">
         {question.questionText}
-      </p>
+      </h2>
 
       <div
         role="radiogroup"
@@ -131,19 +173,31 @@ export function BattleQuestion({
       >
         {question.options.map((option) => {
           const isSelected = mySelectedOptionId === option.id;
+          const isCorrectOption = revealCorrectOptionId === option.id;
+
+          // Apply quiz-correct / quiz-wrong motion on the user's locked
+          // chip the moment the server reveals the answer.
+          const animateOnReveal =
+            isAnswered && isRevealed && isSelected
+              ? isCorrectOption
+                ? correctAnim
+                : wrongAnim
+              : undefined;
+
           return (
-            <button
+            <motion.button
               key={option.id}
               type="button"
               role="radio"
               aria-checked={isSelected}
               disabled={isAnswered}
-              className={getOptionStyle(option.id)}
+              animate={animateOnReveal}
+              className={getOptionClasses(option.id)}
               onClick={() => onSelect(option.id)}
             >
               {getOptionIcon(option.id)}
-              <span className="text-sm leading-snug">{option.text}</span>
-            </button>
+              <span className="text-[14px] leading-[1.5]">{option.text}</span>
+            </motion.button>
           );
         })}
       </div>
@@ -153,7 +207,7 @@ export function BattleQuestion({
         <p
           role="status"
           aria-live="polite"
-          className="mt-4 text-sm text-muted-foreground"
+          className="mt-4 text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]"
         >
           Waiting for {opponentName}&hellip;
         </p>
@@ -161,15 +215,22 @@ export function BattleQuestion({
 
       {/* Post-reveal feedback heading — NO explanation body per battle spec. */}
       {isAnswered && isRevealed && (
-        <div role="alert" className="mt-4 border-t border-border pt-3">
+        <div
+          role="alert"
+          className="mt-4 border-t border-[hsl(var(--border))] pt-3"
+        >
           {mySelectedOptionId === null ? (
-            <p className="text-sm font-semibold text-muted-foreground">
+            <p className="text-[14px] font-semibold leading-[1.5] text-[hsl(var(--fg-muted))]">
               Time&rsquo;s up
             </p>
           ) : mySelectedOptionId === revealCorrectOptionId ? (
-            <p className="text-sm font-semibold text-primary">Correct</p>
+            <p className="text-[14px] font-semibold leading-[1.5] text-[hsl(var(--success))]">
+              Correct
+            </p>
           ) : (
-            <p className="text-sm font-semibold text-destructive">Incorrect</p>
+            <p className="text-[14px] font-semibold leading-[1.5] text-[hsl(var(--destructive))]">
+              Wrong
+            </p>
           )}
         </div>
       )}

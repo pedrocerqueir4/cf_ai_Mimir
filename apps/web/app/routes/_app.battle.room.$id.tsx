@@ -172,20 +172,11 @@ function BattleRoomInner({ battleId }: { battleId: string }) {
   // ── Main battle-room render ───────────────────────────────────────────
   return (
     <>
-      <div className="mx-auto flex min-h-screen max-w-[720px] flex-col gap-6 bg-background px-4 py-8">
-        {/* Round indicator */}
-        <div
-          role="status"
-          aria-live="polite"
-          className="text-center text-sm text-muted-foreground"
-        >
-          Round {Math.min(currentQuestionIdx + 1, totalQuestions)} of{" "}
-          {totalQuestions}
-        </div>
-
-        {/* Score cards row */}
-        <div className="flex gap-2">
-          <div className="flex-1">
+      <div className="mx-auto flex min-h-screen max-w-[720px] flex-col gap-6 bg-background pb-8">
+        {/* Top frosted bar — ScoreCard me / BattleTimer / ScoreCard opponent.
+            UI-SPEC § Battle Room. Sticky below the AppShell status bar. */}
+        <div className="sticky top-14 z-30 flex items-center gap-3 border-b border-[hsl(var(--border))] bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card px-4 py-3">
+          <div className="flex-1 min-w-0">
             <ScoreCard
               user={{
                 name: session?.user?.name ?? "You",
@@ -196,7 +187,10 @@ function BattleRoomInner({ battleId }: { battleId: string }) {
               connectionState={selfDot}
             />
           </div>
-          <div className="flex-1">
+          <div className="shrink-0">
+            <BattleTimer timeRemainingMs={timeRemainingMs} />
+          </div>
+          <div className="flex-1 min-w-0">
             <ScoreCard
               user={{
                 name: opponentName ?? "Opponent",
@@ -209,12 +203,18 @@ function BattleRoomInner({ battleId }: { battleId: string }) {
           </div>
         </div>
 
-        {/* Timer */}
-        <div className="flex justify-center">
-          <BattleTimer timeRemainingMs={timeRemainingMs} />
+        {/* Round indicator */}
+        <div
+          role="status"
+          aria-live="polite"
+          className="px-4 text-center text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]"
+        >
+          Round {Math.min(currentQuestionIdx + 1, totalQuestions)} of{" "}
+          {totalQuestions}
         </div>
 
         {/* Question */}
+        <div className="px-4">
         {currentQuestion ? (
           <BattleQuestion
             question={currentQuestion}
@@ -232,12 +232,13 @@ function BattleRoomInner({ battleId }: { battleId: string }) {
             }}
           />
         ) : (
-          <Card className="p-4 text-sm text-muted-foreground">
+          <Card className="p-4 text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]">
             {status === "connecting"
               ? "Connecting\u2026"
               : "Waiting for the first question\u2026"}
           </Card>
         )}
+        </div>
       </div>
 
       {/* Reconnect overlay — fires based on phase transitions. */}

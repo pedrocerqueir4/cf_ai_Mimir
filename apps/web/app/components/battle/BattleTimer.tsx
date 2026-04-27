@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "~/lib/utils";
 
 const DEFAULT_TOTAL_MS = 15_000;
@@ -11,24 +12,21 @@ interface BattleTimerProps {
 }
 
 /**
- * Circular SVG countdown ring with centred digit.
+ * Phase 06 Plan 03 — UI-SPEC § Battle Room timer:
+ *   display-sm (22 mobile / 28 lg) Rubik Mono One digits with
+ *   tabular-nums; turns ruby + 1Hz scale pulse below 5s.
  *
- * - Diameter: 96px mobile / 128px desktop (UI-SPEC §Battle timer visual).
- * - Stroke: 6px mobile / 8px desktop.
- * - `pathLength=100` makes the offset math simple: offset 0 → full ring,
- *   100 → empty ring.
- * - Stroke colour transitions from primary → destructive in the LAST 3
- *   seconds (UI-SPEC). The flip is a colour swap — no animation on the
- *   colour itself so the tension is in the stroke shrinkage, not
- *   rainbow-churn.
- * - Digit: Display role (28/40, weight 600) + tabular-nums; `aria-hidden`
- *   so screen readers don't read every tick. A separate `sr-only`
- *   `aria-live="polite"` announces 10s/5s/0s bucket crossings only.
+ * The circular SVG ring chassis is preserved (Phase 04 timing lock).
+ * Critical-state threshold widened from 3s → 5s per UI-SPEC. The pulse is
+ * gated on useReducedMotion — reduced users see the static digits + ruby
+ * tint with no scale animation.
  */
 export function BattleTimer({
   timeRemainingMs,
   totalMs = DEFAULT_TOTAL_MS,
 }: BattleTimerProps) {
+  const prefersReducedMotion = useReducedMotion();
+
   const clampedMs = Math.max(0, Math.min(timeRemainingMs, totalMs));
   const elapsedPct = 1 - clampedMs / totalMs;
   // `strokeDasharray` = 100, so `strokeDashoffset` = 0..100 equates to
@@ -36,7 +34,7 @@ export function BattleTimer({
   // empty ring at t=totalMs (offset=100).
   const strokeDashoffset = Math.max(0, Math.min(100, elapsedPct * 100));
   const seconds = Math.ceil(clampedMs / 1000);
-  const isCritical = clampedMs <= 3_000;
+  const isCritical = clampedMs <= 5_000;
 
   // Track the last-announced bucket so we only emit at 10s / 5s / 0s.
   const lastAnnouncedRef = useRef<number | null>(null);
@@ -54,6 +52,19 @@ export function BattleTimer({
       : lastAnnouncedRef.current !== null
         ? `${lastAnnouncedRef.current} seconds left`
         : "";
+
+  // UI-SPEC § Motion — ruby pulse below 5s. Reduced motion: no pulse.
+  const pulseAnim =
+    isCritical && !prefersReducedMotion
+      ? {
+          scale: [1, 1.05, 1],
+          transition: {
+            duration: 1,
+            repeat: Infinity,
+            ease: [0.4, 0, 0.6, 1] as const,
+          },
+        }
+      : undefined;
 
   return (
     <div className="relative h-24 w-24 lg:h-32 lg:w-32">
@@ -84,7 +95,9 @@ export function BattleTimer({
           strokeLinecap="round"
           strokeWidth={6}
           stroke={
-            isCritical ? "hsl(var(--destructive))" : "hsl(var(--primary))"
+            isCritical
+              ? "hsl(var(--destructive))"
+              : "hsl(var(--dominant))"
           }
           className={cn(
             "transition-[stroke] duration-150 lg:[stroke-width:8]",
@@ -97,17 +110,20 @@ export function BattleTimer({
         />
       </svg>
 
-      {/* Digit */}
-      <div
+      {/* Digit — display-sm Rubik Mono One. */}
+      <motion.div
         aria-hidden="true"
+        animate={pulseAnim}
         className={cn(
-          "absolute inset-0 flex items-center justify-center font-semibold tabular-nums leading-none",
-          "text-[28px] lg:text-[40px]",
-          isCritical ? "text-destructive" : "text-foreground",
+          "absolute inset-0 flex items-center justify-center font-display tabular-nums leading-[1.2]",
+          "text-[22px] lg:text-[28px] lg:leading-[1.15]",
+          isCritical
+            ? "text-[hsl(var(--destructive))]"
+            : "text-foreground",
         )}
       >
         {seconds}
-      </div>
+      </motion.div>
 
       {/* Screen-reader-only live region — fires on bucket crossings */}
       <div role="status" aria-live="polite" className="sr-only">
