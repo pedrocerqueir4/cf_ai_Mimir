@@ -72,6 +72,7 @@ export function InLessonQASheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
+        variant="frosted"
         className="h-[60vh] p-0 flex flex-col"
         aria-label="Lesson Q&A"
         aria-modal="true"

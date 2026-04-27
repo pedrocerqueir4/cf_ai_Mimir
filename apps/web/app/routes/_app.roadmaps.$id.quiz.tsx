@@ -216,14 +216,17 @@ export default function PracticeQuizPage() {
         />
       )}
 
-      {/* Next / Finish navigation */}
+      {/* Next / Finish navigation — CTA copy lock per UI-SPEC § Copywriting
+          Contract: "Submit answer" → "Next" (post-submit). The Submit
+          affordance is the answer chip itself (auto-submit on tap); this
+          button drives the "Next" copy. */}
       {isCurrentAnswered && (
         <Button
           variant="default"
           className="w-full mt-2"
           onClick={handleNext}
         >
-          {isLastQuestion ? "See results" : "Next question"}
+          {isLastQuestion ? "See results" : "Next"}
         </Button>
       )}
     </div>

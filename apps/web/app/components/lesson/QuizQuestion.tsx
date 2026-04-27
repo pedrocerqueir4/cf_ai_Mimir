@@ -1,10 +1,15 @@
 import { useState } from "react";
 import { CheckCircle, XCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import { Card } from "~/components/ui/card";
+import { cn } from "~/lib/utils";
 import { submitQuizAnswer } from "~/lib/api-client";
-import type { QuizQuestion as QuizQuestionType, QuizAnswerResult } from "~/lib/api-client";
+import type {
+  QuizQuestion as QuizQuestionType,
+  QuizAnswerResult,
+} from "~/lib/api-client";
 
 interface QuizQuestionProps {
   question: QuizQuestionType;
@@ -17,18 +22,26 @@ type AnswerState =
   | { phase: "answered"; selectedOptionId: string; result: QuizAnswerResult };
 
 /**
- * Reusable quiz question component with instant per-question feedback.
+ * Phase 06 Plan 03 — UI-SPEC § Inline Quiz.
  *
- * - Auto-submits on tap (no confirm step) per D-12
- * - Correct: accent border (border-primary), CheckCircle icon
- * - Wrong: destructive border (border-destructive), XCircle icon; correct option gets accent border
- * - No green color — correct uses accent (blue), wrong uses destructive (red) per UI-SPEC
- * - role="radiogroup" / role="radio" for accessibility
- * - role="alert" feedback container announces correct/wrong to screen readers
+ * Atomic 3-phase state machine preserved verbatim from Phase 02 (Submit
+ * answer → locked → reveal). Phase 06 changes:
+ * - Question text: h2 22/1.25/600 centered, max-w 600 (UI-SPEC contract)
+ * - Answer chips: full-width <motion.button> consuming `--success-soft` /
+ *   `--destructive-soft` post-lock; quiz-correct (halo pulse) and
+ *   quiz-wrong (translateX shake) motion variants gated on
+ *   `useReducedMotion()`.
+ * - Live region: role="status" aria-live="polite" announces correct/wrong.
+ * - CTA copy lock: pre-submit guidance reads "Submit answer" (sr-only +
+ *   visible caption) → "Next" CTA owned by parent route.
+ *
+ * Auto-submit on tap preserved (Phase 02 D-12) — the chip itself is the
+ * Submit affordance. The "Submit answer" caption is a hint, not a button.
  */
 export function QuizQuestion({ question, onAnswered }: QuizQuestionProps) {
   const [state, setState] = useState<AnswerState>({ phase: "idle" });
   const queryClient = useQueryClient();
+  const prefersReducedMotion = useReducedMotion();
 
   const isAnswered = state.phase === "answered";
   const isSubmitting = state.phase === "submitting";
@@ -55,14 +68,46 @@ export function QuizQuestion({ question, onAnswered }: QuizQuestionProps) {
     }
   }
 
-  function getOptionStyle(optionId: string): string {
+  // UI-SPEC § Motion `quiz-correct` — emerald halo pulse. Reduced: no halo.
+  const correctAnim = prefersReducedMotion
+    ? undefined
+    : {
+        boxShadow: [
+          "0 0 0 0 rgba(52, 211, 153, 0)",
+          "0 0 24px 4px rgba(52, 211, 153, 0.45)",
+          "0 0 0 0 rgba(52, 211, 153, 0)",
+        ],
+        transition: {
+          duration: 0.32,
+          ease: [0.34, 1.56, 0.64, 1] as const,
+        },
+      };
+
+  // UI-SPEC § Motion `quiz-wrong` — translateX shake. Reduced: no shake.
+  const wrongAnim = prefersReducedMotion
+    ? undefined
+    : {
+        x: [-4, 4, -2, 2, 0],
+        transition: {
+          duration: 0.2,
+          ease: [0.2, 0.8, 0.2, 1] as const,
+        },
+      };
+
+  function getOptionClasses(optionId: string): string {
     const base =
-      "flex items-center gap-3 w-full min-h-[52px] px-4 py-3 rounded-lg border transition-colors text-left";
+      "flex w-full min-h-12 items-center gap-3 rounded-[var(--radius-md)] border bg-card px-4 py-3 text-left text-[16px] font-medium leading-[1.5] transition-colors";
 
     if (state.phase === "idle" || state.phase === "submitting") {
       const isSelected =
         state.phase === "submitting" && state.selectedOptionId === optionId;
-      return `${base} border-border bg-card ${isSelected ? "opacity-70" : "hover:bg-muted/50 cursor-pointer"}`;
+      return cn(
+        base,
+        "border-[hsl(var(--border))]",
+        !isSelected &&
+          "hover:bg-[hsl(var(--bg-subtle))] hover:border-[hsl(var(--border-strong))] cursor-pointer",
+        isSelected && "opacity-70",
+      );
     }
 
     // Answered state
@@ -71,19 +116,27 @@ export function QuizQuestion({ question, onAnswered }: QuizQuestionProps) {
     const isCorrectOption = result.correctOptionId === optionId;
 
     if (isSelected && result.correct) {
-      // Correct selection: accent border
-      return `${base} border-primary bg-card pointer-events-none`;
+      return cn(
+        base,
+        "border-[hsl(var(--success))] bg-[hsl(var(--success-soft))] text-[hsl(var(--success))] pointer-events-none",
+      );
     }
     if (isSelected && !result.correct) {
-      // Wrong selection: destructive border
-      return `${base} border-destructive bg-card pointer-events-none`;
+      return cn(
+        base,
+        "border-[hsl(var(--destructive))] bg-[hsl(var(--destructive-soft))] text-[hsl(var(--destructive))] pointer-events-none",
+      );
     }
     if (!isSelected && isCorrectOption && !result.correct) {
-      // Show the correct option with accent border when user got it wrong
-      return `${base} border-primary bg-card pointer-events-none`;
+      return cn(
+        base,
+        "border-[hsl(var(--success))] bg-[hsl(var(--success-soft))] text-[hsl(var(--success))] pointer-events-none",
+      );
     }
-    // All other options: neutral, non-interactive
-    return `${base} border-border bg-card pointer-events-none opacity-50`;
+    return cn(
+      base,
+      "border-[hsl(var(--border))] pointer-events-none opacity-50",
+    );
   }
 
   function getOptionIcon(optionId: string) {
@@ -91,7 +144,7 @@ export function QuizQuestion({ question, onAnswered }: QuizQuestionProps) {
       // Radio-style indicator: unfilled circle
       return (
         <span
-          className="flex-shrink-0 h-5 w-5 rounded-full border-2 border-muted-foreground"
+          className="flex-shrink-0 h-5 w-5 rounded-full border-2 border-[hsl(var(--border-strong))]"
           aria-hidden="true"
         />
       );
@@ -104,7 +157,7 @@ export function QuizQuestion({ question, onAnswered }: QuizQuestionProps) {
     if (isSelected && result.correct) {
       return (
         <CheckCircle
-          className="flex-shrink-0 h-5 w-5 text-primary"
+          className="flex-shrink-0 h-5 w-5 text-[hsl(var(--success))]"
           aria-hidden="true"
         />
       );
@@ -112,7 +165,7 @@ export function QuizQuestion({ question, onAnswered }: QuizQuestionProps) {
     if (isSelected && !result.correct) {
       return (
         <XCircle
-          className="flex-shrink-0 h-5 w-5 text-destructive"
+          className="flex-shrink-0 h-5 w-5 text-[hsl(var(--destructive))]"
           aria-hidden="true"
         />
       );
@@ -120,14 +173,14 @@ export function QuizQuestion({ question, onAnswered }: QuizQuestionProps) {
     if (!isSelected && isCorrectOption && !result.correct) {
       return (
         <CheckCircle
-          className="flex-shrink-0 h-5 w-5 text-primary"
+          className="flex-shrink-0 h-5 w-5 text-[hsl(var(--success))]"
           aria-hidden="true"
         />
       );
     }
     return (
       <span
-        className="flex-shrink-0 h-5 w-5 rounded-full border-2 border-muted-foreground opacity-50"
+        className="flex-shrink-0 h-5 w-5 rounded-full border-2 border-[hsl(var(--border))] opacity-50"
         aria-hidden="true"
       />
     );
@@ -137,51 +190,89 @@ export function QuizQuestion({ question, onAnswered }: QuizQuestionProps) {
 
   return (
     <Card className="p-4 mb-4">
-      {/* Question text */}
-      <p className="text-base leading-relaxed mb-4">{question.question}</p>
+      {/* Question text — h2 22/1.25/600 centered max-w 600 per UI-SPEC. */}
+      <h2 className="mx-auto mb-4 max-w-[600px] text-center text-[22px] font-semibold leading-[1.25] -tracking-[0.005em] text-foreground">
+        {question.question}
+      </h2>
+
+      {/* Pre-submit caption — UI-SPEC § Copywriting Contract CTA copy lock.
+          Auto-submit on tap means the chip itself is the Submit affordance;
+          the caption guides users + satisfies the "Submit answer" copy lock. */}
+      {isInteractive && (
+        <p className="mb-3 text-center text-[12px] leading-[1.4] tracking-[0.005em] text-[hsl(var(--fg-muted))]">
+          Submit answer by tapping an option below.
+        </p>
+      )}
 
       {/* Options */}
       <div
         role="radiogroup"
         aria-label={question.question}
-        className={`flex flex-col gap-2 ${!isInteractive ? "pointer-events-none" : ""}`}
+        className={cn(
+          "flex flex-col gap-2",
+          !isInteractive && "pointer-events-none",
+        )}
       >
         {question.options.map((option) => {
           const isSelectedOption =
             (state.phase === "submitting" || state.phase === "answered") &&
             state.selectedOptionId === option.id;
 
+          // Apply quiz-correct / quiz-wrong motion to the selected chip on
+          // the first frame after the answer is locked. Other chips animate
+          // their bg via plain CSS transition (transition-colors).
+          const animateOnAnswered =
+            state.phase === "answered" && state.selectedOptionId === option.id
+              ? state.result.correct
+                ? correctAnim
+                : wrongAnim
+              : undefined;
+
           return (
-            <button
+            <motion.button
               key={option.id}
               role="radio"
               aria-checked={isSelectedOption}
               disabled={isSubmitting || isAnswered}
-              className={getOptionStyle(option.id)}
+              animate={animateOnAnswered}
+              className={getOptionClasses(option.id)}
               onClick={() => handleOptionSelect(option.id)}
               type="button"
             >
               {getOptionIcon(option.id)}
-              <span className="text-sm leading-snug">{option.text}</span>
-            </button>
+              <span className="text-[14px] leading-[1.5]">{option.text}</span>
+            </motion.button>
           );
         })}
       </div>
 
-      {/* Feedback — announced to screen readers via role="alert" */}
+      {/* Live region — announces correct/wrong to screen readers. */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {answeredState
+          ? answeredState.result.correct
+            ? "Correct"
+            : "Wrong"
+          : ""}
+      </div>
+
+      {/* Visible feedback panel */}
       {answeredState && (
-        <div role="alert" className="mt-4 pt-3 border-t border-border">
+        <div
+          role="alert"
+          className="mt-4 pt-3 border-t border-[hsl(var(--border))]"
+        >
           <p
-            className={`text-sm font-semibold mb-1 ${
+            className={cn(
+              "mb-1 text-[14px] font-semibold leading-[1.5]",
               answeredState.result.correct
-                ? "text-primary"
-                : "text-destructive"
-            }`}
+                ? "text-[hsl(var(--success))]"
+                : "text-[hsl(var(--destructive))]",
+            )}
           >
             {answeredState.result.correct ? "Correct" : "Incorrect"}
           </p>
           {answeredState.result.explanation && (
-            <p className="text-sm text-muted-foreground leading-relaxed">
+            <p className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]">
               {answeredState.result.explanation}
             </p>
           )}
