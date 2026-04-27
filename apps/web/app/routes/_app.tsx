@@ -28,19 +28,18 @@ export default function AppLayout() {
   const reducedMotion = useReducedMotion();
 
   // UI-SPEC § 5.1 motion `page-transition`:
-  //   full motion: 200ms ease-soft, opacity 0→1 + translateY 8px→0
-  //   reduced motion: 120ms opacity-only, no translate
-  // Direct child of <AnimatePresence> must be the keyed <motion.div> so
-  // pathname changes are visible to AnimatePresence (RESEARCH.md Pitfall 3).
-  const pageVariants = reducedMotion
-    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
-    : {
-        initial: { opacity: 0, y: 8 },
-        animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, y: -8 },
-      };
+  //   full motion: 180ms ease-soft, opacity crossfade (popLayout mode)
+  //   reduced motion: 100ms opacity-only
+  // popLayout overlaps exit + enter so there's no blank-screen gap between
+  // pages — the previous "mode=wait + y:8 slide" produced a perceptible blink
+  // because the old page's exit fully completed before the new page mounted.
+  const pageVariants = {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+  };
   const transition = {
-    duration: reducedMotion ? 0.12 : 0.2,
+    duration: reducedMotion ? 0.1 : 0.18,
     ease: [0.4, 0, 0.2, 1] as const,
   };
 
@@ -67,7 +66,7 @@ export default function AppLayout() {
 
   return (
     <AppShell immersive={immersive}>
-      <AnimatePresence mode="wait" initial={false}>
+      <AnimatePresence mode="popLayout" initial={false}>
         <motion.div
           key={location.pathname}
           variants={pageVariants}
