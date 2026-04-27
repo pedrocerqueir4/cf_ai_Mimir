@@ -14,18 +14,10 @@ import "./app.css";
 import { getStoredTheme, applyTheme } from "~/lib/theme";
 import { Toaster } from "~/components/ui/sonner";
 
-export const links: Route.LinksFunction = () => [
-  { rel: "preconnect", href: "https://fonts.googleapis.com" },
-  {
-    rel: "preconnect",
-    href: "https://fonts.gstatic.com",
-    crossOrigin: "anonymous",
-  },
-  {
-    rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
-  },
-];
+// Fonts now self-hosted via @fontsource imports in app.css (see Phase 06 Plan 1).
+// No <link rel="preload"> directives — trust @fontsource's font-display:swap default.
+// (RESEARCH.md Open Question 1 + Pitfall 6 — revisit in Plan 6 only if LCP regresses.)
+export const links: Route.LinksFunction = () => [];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (

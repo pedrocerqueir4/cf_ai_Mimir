@@ -1,8 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+@import "@fontsource/rubik/latin-400.css";
+@import "@fontsource/rubik/latin-500.css";
+@import "@fontsource/rubik/latin-600.css";
+@import "@fontsource/rubik-mono-one/latin-400.css";
 @import "tailwindcss" source(".");
 
 @theme {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Rubik', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: 'Rubik Mono One', ui-monospace, 'SF Mono', Menlo, monospace;
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --color-card: hsl(var(--card));
@@ -35,80 +39,190 @@
   --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Net-new direct-named color utilities (UI-SPEC § Color) */
+  --color-bg-frosted: var(--bg-frosted);
+  --color-bg-overlay: var(--bg-overlay);
+  --color-celebration-from: hsl(var(--celebration-from));
+  --color-celebration-to: hsl(var(--celebration-to));
+  /* Spacing scale (UI-SPEC § Spacing — 12px dropped, 96px kept by force-approval) */
+  --spacing-2xs: 4px;
+  --spacing-xs: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  --spacing-3xl: 64px;
+  --spacing-4xl: 96px;
+  /* Easing tokens (UI-SPEC § Motion vocabulary) */
+  --ease-snap: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-celebrate: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-glide: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Duration tokens (UI-SPEC § Motion vocabulary) */
+  --duration-instant: 80ms;
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --duration-glide: 480ms;
+  --duration-theatrical: 800ms;
+  /* Radii (UI-SPEC § Radii) */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 9999px;
 }
 
 @layer base {
   :root {
-    --background: 0 0% 98%;        /* zinc-50 #FAFAFA */
-    --foreground: 240 10% 10%;     /* zinc-900 #18181B */
-    --card: 240 5% 96%;            /* zinc-100 #F4F4F5 */
-    --card-foreground: 240 10% 10%;
-    --primary: 217 91% 60%;        /* blue-500 #3B82F6 */
+    /* shadcn back-compat HSL triplets retargeted to UI-SPEC light tokens */
+    --background: 264 33% 98%;
+    --foreground: 254 24% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 254 24% 9%;
+    --primary: 262 83% 58%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 10% 10%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%; /* zinc-500 #71717A */
-    --destructive: 0 84% 60%;      /* red-500 #EF4444 */
+    --secondary: 264 25% 95%;
+    --secondary-foreground: 254 24% 9%;
+    --muted: 264 25% 95%;
+    --muted-foreground: 254 12% 39%;
+    --destructive: 0 73% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 6% 90%;           /* zinc-200 #E4E4E7 */
-    --input: 240 6% 90%;
-    --ring: 217 91% 60%;
-    --radius: 0.5rem;
-    --accent: 240 5% 96%;
-    --accent-foreground: 240 10% 10%;
+    --accent: 264 100% 95%;
+    --accent-foreground: 262 83% 58%;
+    --border: 261 22% 92%;
+    --input: 261 22% 92%;
+    --ring: 254 96% 76%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 10%;
-    --chart-1: 217 91% 60%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5% 26%;
-    --sidebar-primary: 217 91% 60%;
+    --popover-foreground: 254 24% 9%;
+    --radius: 0.625rem;
+    /* Net-new direct-named tokens (UI-SPEC § Color light-mode) */
+    --bg-base: 264 33% 98%;
+    --bg-elevated: 0 0% 100%;
+    --bg-subtle: 264 25% 95%;
+    --bg-frosted: rgba(255, 255, 255, 0.72);
+    --bg-overlay: rgba(11, 10, 18, 0.48);
+    --fg: 254 24% 9%;
+    --fg-muted: 254 12% 39%;
+    --fg-subtle: 254 11% 57%;
+    --dominant: 262 83% 58%;
+    --dominant-hover: 263 70% 50%;
+    --dominant-soft: 264 100% 95%;
+    --dominant-fg: 0 0% 100%;
+    --border-strong: 264 22% 84%;
+    --success: 161 94% 30%;
+    --success-soft: 152 76% 90%;
+    --success-fg: 0 0% 100%;
+    --destructive-soft: 0 96% 94%;
+    --destructive-fg: 0 0% 100%;
+    --celebration-from: 254 96% 76%;
+    --celebration-to: 0 91% 71%;
+    --shadow-sm: 0 1px 2px rgba(13, 11, 28, 0.06);
+    --shadow-md: 0 4px 12px rgba(13, 11, 28, 0.08);
+    --shadow-lg: 0 12px 32px rgba(13, 11, 28, 0.12);
+    --shadow-glow-amethyst: 0 0 0 4px rgba(167, 139, 250, 0.25);
+    --shadow-glow-emerald: 0 0 24px rgba(52, 211, 153, 0.35);
+    --shadow-glow-ruby: 0 0 24px rgba(248, 113, 113, 0.35);
+    --blur-sm: 8px;
+    --blur-md: 16px;
+    --blur-lg: 24px;
+    --chart-1: 262 83% 58%;
+    --chart-2: 161 94% 30%;
+    --chart-3: 0 73% 50%;
+    --chart-4: 199 89% 48%;
+    --chart-5: 38 92% 50%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 254 12% 39%;
+    --sidebar-primary: 262 83% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 5% 96%;
-    --sidebar-accent-foreground: 240 5% 26%;
-    --sidebar-border: 240 6% 90%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-accent: 264 100% 95%;
+    --sidebar-accent-foreground: 262 83% 58%;
+    --sidebar-border: 261 22% 92%;
+    --sidebar-ring: 254 96% 76%;
   }
   .dark {
-    --background: 240 10% 10%;     /* zinc-900 #18181B */
-    --foreground: 0 0% 98%;
-    --card: 240 5% 16%;            /* zinc-800 #27272A */
-    --card-foreground: 0 0% 98%;
-    --primary: 213 94% 68%;        /* blue-400 #60A5FA */
-    --primary-foreground: 240 10% 10%;
-    --secondary: 240 5% 16%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 5% 16%;
-    --muted-foreground: 240 5% 64%; /* zinc-400 #A1A1AA */
-    --destructive: 0 72% 51%;      /* red-400 #F87171 */
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 4% 25%;           /* zinc-700 #3F3F46 */
-    --input: 240 4% 25%;
-    --ring: 213 94% 68%;
-    --accent: 240 5% 16%;
-    --accent-foreground: 0 0% 98%;
-    --popover: 240 10% 10%;
-    --popover-foreground: 0 0% 98%;
-    --chart-1: 213 94% 68%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 10% 10%;
-    --sidebar-foreground: 240 5% 64%;
-    --sidebar-primary: 213 94% 68%;
-    --sidebar-primary-foreground: 240 10% 10%;
-    --sidebar-accent: 240 5% 16%;
-    --sidebar-accent-foreground: 240 5% 64%;
-    --sidebar-border: 240 4% 25%;
-    --sidebar-ring: 213 94% 68%;
+    /* shadcn back-compat HSL triplets retargeted to UI-SPEC dark tokens */
+    --background: 252 26% 6%;          /* #0B0A12 */
+    --foreground: 264 25% 96%;          /* #F4F2F8 */
+    --card: 254 23% 10%;                /* #15131F */
+    --card-foreground: 264 25% 96%;
+    --primary: 254 96% 76%;             /* #A78BFA */
+    --primary-foreground: 252 26% 6%;
+    --secondary: 254 22% 13%;           /* #1B1828 */
+    --secondary-foreground: 264 25% 96%;
+    --muted: 254 22% 13%;
+    --muted-foreground: 261 18% 67%;    /* #A39DB8 */
+    --destructive: 0 91% 71%;           /* #F87171 */
+    --destructive-foreground: 0 70% 6%; /* #1A0606 */
+    --accent: 256 41% 21%;              /* #2B1F4D */
+    --accent-foreground: 254 96% 76%;
+    --border: 256 22% 18%;              /* #2A2638 */
+    --input: 256 22% 18%;
+    --ring: 254 96% 76%;
+    --popover: 254 23% 10%;
+    --popover-foreground: 264 25% 96%;
+    /* Net-new direct-named tokens (UI-SPEC § Color dark-mode) */
+    --bg-base: 252 26% 6%;
+    --bg-elevated: 254 23% 10%;
+    --bg-subtle: 254 22% 13%;
+    --bg-frosted: rgba(21, 19, 31, 0.62);
+    --bg-overlay: rgba(0, 0, 0, 0.64);
+    --fg: 264 25% 96%;
+    --fg-muted: 261 18% 67%;
+    --fg-subtle: 256 13% 47%;           /* #6E6885 */
+    --dominant: 254 96% 76%;
+    --dominant-hover: 258 90% 67%;      /* #8B5CF6 */
+    --dominant-soft: 256 41% 21%;
+    --dominant-fg: 252 26% 6%;
+    --border-strong: 256 22% 27%;       /* #3D3753 */
+    --success: 156 64% 51%;             /* #34D399 */
+    --success-soft: 162 51% 12%;        /* #0F2E25 */
+    --success-fg: 159 65% 4%;           /* #03110D */
+    --destructive-soft: 0 47% 15%;      /* #3A1414 */
+    --destructive-fg: 0 70% 6%;
+    --celebration-from: 254 96% 76%;
+    --celebration-to: 351 95% 71%;      /* #FB7185 */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(167, 139, 250, 0.08);
+    --shadow-glow-amethyst: 0 0 32px rgba(167, 139, 250, 0.35);
+    --shadow-glow-emerald: 0 0 32px rgba(52, 211, 153, 0.45);
+    --shadow-glow-ruby: 0 0 32px rgba(248, 113, 113, 0.45);
+    --chart-1: 254 96% 76%;
+    --chart-2: 156 64% 51%;
+    --chart-3: 0 91% 71%;
+    --chart-4: 199 89% 64%;
+    --chart-5: 45 96% 64%;
+    --sidebar-background: 254 23% 10%;
+    --sidebar-foreground: 261 18% 67%;
+    --sidebar-primary: 254 96% 76%;
+    --sidebar-primary-foreground: 252 26% 6%;
+    --sidebar-accent: 256 41% 21%;
+    --sidebar-accent-foreground: 254 96% 76%;
+    --sidebar-border: 256 22% 18%;
+    --sidebar-ring: 254 96% 76%;
+  }
+}
+
+/* Skeleton shimmer keyframe (consumed by skeleton.tsx via the skeleton-shimmer class). */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(var(--dominant-soft) / 0.6) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none;
+    background-image: none;
   }
 }
