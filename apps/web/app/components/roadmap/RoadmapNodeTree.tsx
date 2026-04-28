@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { CheckCircle, Lock } from "lucide-react";
+import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { Card, CardContent } from "~/components/ui/card";
 import {
   Tooltip,
@@ -10,6 +11,29 @@ import {
 } from "~/components/ui/tooltip";
 import type { RoadmapNode } from "~/lib/api-client";
 import { cn } from "~/lib/utils";
+
+// ─── Stagger variants (UI-SPEC § Roadmap Detail Motion: lessons stagger in) ──
+
+const listContainerVariants: Variants = {
+  hidden: { opacity: 1 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.04 } },
+};
+
+function buildItemVariants(reduced: boolean | null): Variants {
+  return reduced
+    ? {
+        hidden: { opacity: 0 },
+        visible: { opacity: 1, transition: { duration: 0.12 } },
+      }
+    : {
+        hidden: { opacity: 0, y: 12 },
+        visible: {
+          opacity: 1,
+          y: 0,
+          transition: { duration: 0.32, ease: [0.4, 0, 0.2, 1] as const },
+        },
+      };
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,40 +48,34 @@ interface NodeTreeProps {
 
 // ─── Node State Computation ───────────────────────────────────────────────────
 
-/**
- * Compute node state client-side from completedLessonIds and prerequisites.
- * If the node already has a `state` field from the API, prefer that.
- * Otherwise derive from completedLessonIds + parentId structure.
- */
 function computeNodeState(
   node: RoadmapNode,
   allNodes: RoadmapNode[],
   completedLessonIds: string[],
-  depth: number
+  depth: number,
 ): NodeState {
-  // If API already provides a computed state, use it
   if (node.state) return node.state as NodeState;
 
-  // Derive from completedLessonIds
   if (node.lessonId && completedLessonIds.includes(node.lessonId)) {
     return "completed";
   }
 
-  // Root nodes (no parent, first in order) are always available
   if (!node.parentId && node.order === 0) return "available";
   if (depth === 0 && node.order === 0) return "available";
 
-  // Check if parent is completed (branching roadmaps)
   if (node.parentId) {
     const parent = allNodes.find((n) => n.id === node.parentId);
     if (!parent) return "available";
-    const parentState = computeNodeState(parent, allNodes, completedLessonIds, depth - 1);
+    const parentState = computeNodeState(
+      parent,
+      allNodes,
+      completedLessonIds,
+      depth - 1,
+    );
     if (parentState !== "completed") return "locked";
     return "available";
   }
 
-  // Linear ordering fallback: no parentId but order > 0
-  // All preceding nodes (by order) must be completed
   if (node.order > 0) {
     const allPrecedingComplete = allNodes
       .filter((n) => n.order < node.order)
@@ -86,7 +104,6 @@ function NodeCard({ node, state, roadmapId }: NodeCardProps) {
 
   function handleClick() {
     if (isLocked) {
-      // Show tooltip for 1.5s
       setTooltipOpen(true);
       setTimeout(() => setTooltipOpen(false), 1500);
       return;
@@ -103,7 +120,16 @@ function NodeCard({ node, state, roadmapId }: NodeCardProps) {
     }
   }
 
-  const cardBorderClass = isInProgress ? "border-primary" : "border-border";
+  // UI-SPEC § Roadmap Detail — Start lesson / Review caption per state
+  const ctaCopy = isCompleted ? "Review" : isInProgress ? "Resume lesson" : "Start lesson";
+
+  // Status caption color — amethyst for active/in-progress, emerald for done,
+  // subtle for locked (per RoadmapNodeTree action item).
+  const cardBorderClass = isInProgress
+    ? "border-[hsl(var(--dominant))]"
+    : isCompleted
+      ? "border-[hsl(var(--success))]/40"
+      : "border-border";
 
   return (
     <TooltipProvider>
@@ -117,34 +143,69 @@ function NodeCard({ node, state, roadmapId }: NodeCardProps) {
             tabIndex={isLocked ? -1 : 0}
             onClick={handleClick}
             onKeyDown={handleKeyDown}
-            className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-lg"
+            className={cn(
+              "block w-full text-left rounded-[var(--radius-lg)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              isLocked && "cursor-not-allowed",
+            )}
           >
-            <Card className={cn("mx-4 min-h-12", cardBorderClass)}>
+            <Card
+              className={cn(
+                "mx-4 min-h-12 transition-shadow duration-[var(--dur-base)] motion-reduce:transition-none",
+                cardBorderClass,
+                !isLocked && "lg:hover:shadow-[var(--shadow-md)]",
+              )}
+            >
               <CardContent className="p-4">
                 <div className="flex items-center justify-between gap-3">
                   {/* Lock icon for locked nodes */}
                   {isLocked && (
-                    <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <Lock
+                      className="h-4 w-4 text-[hsl(var(--fg-subtle))] shrink-0"
+                      aria-hidden="true"
+                    />
                   )}
 
-                  {/* Node title */}
-                  <span
-                    className={cn(
-                      "text-base flex-1 min-w-0 truncate",
-                      isLocked ? "text-muted-foreground" : "text-foreground"
-                    )}
-                  >
-                    {node.title}
-                  </span>
+                  {/* Node title + CTA caption */}
+                  <div className="flex-1 min-w-0 flex flex-col">
+                    <span
+                      className={cn(
+                        "text-[18px] font-medium leading-[1.3] truncate",
+                        isLocked
+                          ? "text-[hsl(var(--fg-subtle))]"
+                          : "text-foreground",
+                      )}
+                    >
+                      {node.title}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[12px] leading-[1.4] tracking-[0.005em] mt-0.5",
+                        isCompleted
+                          ? "text-[hsl(var(--success))]"
+                          : isInProgress
+                            ? "text-[hsl(var(--dominant))]"
+                            : isLocked
+                              ? "text-[hsl(var(--fg-subtle))]"
+                              : "text-[hsl(var(--fg-muted))]",
+                      )}
+                    >
+                      {isLocked ? "Locked" : ctaCopy}
+                    </span>
+                  </div>
 
-                  {/* CheckCircle for completed nodes */}
+                  {/* Status icon — emerald checkmark for done, amethyst dot for in-progress */}
                   {isCompleted && (
-                    <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+                    <CheckCircle
+                      className="h-5 w-5 text-[hsl(var(--success))] shrink-0"
+                      aria-hidden="true"
+                    />
                   )}
-
-                  {/* Progress dot for in-progress nodes */}
                   {isInProgress && (
-                    <span className="h-2 w-2 rounded-full bg-primary shrink-0" aria-hidden="true" />
+                    <span
+                      className="h-2 w-2 rounded-full bg-[hsl(var(--dominant))] shrink-0"
+                      aria-hidden="true"
+                    />
                   )}
                 </div>
               </CardContent>
@@ -163,10 +224,15 @@ function NodeCard({ node, state, roadmapId }: NodeCardProps) {
 
 // ─── Connector Line ───────────────────────────────────────────────────────────
 
-function ConnectorLine() {
+function ConnectorLine({ active = false }: { active?: boolean }) {
   return (
     <div className="flex justify-center" aria-hidden="true">
-      <div className="w-0.5 h-8 bg-border" />
+      <div
+        className={cn(
+          "w-0.5 h-8",
+          active ? "bg-[hsl(var(--dominant))]" : "bg-border",
+        )}
+      />
     </div>
   );
 }
@@ -177,23 +243,45 @@ interface LinearLayoutProps {
   nodes: RoadmapNode[];
   completedLessonIds: string[];
   roadmapId: string;
+  itemVariants: Variants;
 }
 
-function LinearLayout({ nodes, completedLessonIds, roadmapId }: LinearLayoutProps) {
+function LinearLayout({
+  nodes,
+  completedLessonIds,
+  roadmapId,
+  itemVariants,
+}: LinearLayoutProps) {
   const sorted = [...nodes].sort((a, b) => a.order - b.order);
 
   return (
-    <div className="flex flex-col">
+    <motion.div
+      variants={listContainerVariants}
+      initial="hidden"
+      animate="visible"
+      className="flex flex-col"
+    >
       {sorted.map((node, index) => {
         const state = computeNodeState(node, nodes, completedLessonIds, 0);
+        // Active path: connector before a completed/in-progress node receives
+        // the amethyst tint to surface the user's progress through the timeline.
+        const prev = index > 0 ? sorted[index - 1]! : null;
+        const prevState = prev
+          ? computeNodeState(prev, nodes, completedLessonIds, 0)
+          : null;
+        const connectorActive =
+          prevState === "completed" &&
+          (state === "completed" ||
+            state === "in_progress" ||
+            state === "available");
         return (
-          <div key={node.id}>
-            {index > 0 && <ConnectorLine />}
+          <motion.div key={node.id} variants={itemVariants}>
+            {index > 0 && <ConnectorLine active={connectorActive} />}
             <NodeCard node={node} state={state} roadmapId={roadmapId} />
-          </div>
+          </motion.div>
         );
       })}
-    </div>
+    </motion.div>
   );
 }
 
@@ -205,34 +293,62 @@ interface BranchNodeProps {
   completedLessonIds: string[];
   roadmapId: string;
   depth: number;
+  itemVariants: Variants;
 }
 
-function BranchNode({ node, allNodes, completedLessonIds, roadmapId, depth }: BranchNodeProps) {
+function BranchNode({
+  node,
+  allNodes,
+  completedLessonIds,
+  roadmapId,
+  depth,
+  itemVariants,
+}: BranchNodeProps) {
   const state = computeNodeState(node, allNodes, completedLessonIds, depth);
-  const children = node.children && node.children.length > 0
-    ? [...node.children].sort((a, b) => a.order - b.order)
-    : allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.order - b.order);
+  const children =
+    node.children && node.children.length > 0
+      ? [...node.children].sort((a, b) => a.order - b.order)
+      : allNodes
+          .filter((n) => n.parentId === node.id)
+          .sort((a, b) => a.order - b.order);
 
   return (
-    <div className={cn("flex flex-col", depth > 0 && "pl-8")}>
+    <motion.div
+      variants={itemVariants}
+      className={cn("flex flex-col", depth > 0 && "pl-8")}
+    >
       <NodeCard node={node} state={state} roadmapId={roadmapId} />
       {children.length > 0 && (
         <div className="mt-0">
-          {children.map((child) => (
-            <div key={child.id}>
-              <ConnectorLine />
-              <BranchNode
-                node={child}
-                allNodes={allNodes}
-                completedLessonIds={completedLessonIds}
-                roadmapId={roadmapId}
-                depth={depth + 1}
-              />
-            </div>
-          ))}
+          {children.map((child) => {
+            const childState = computeNodeState(
+              child,
+              allNodes,
+              completedLessonIds,
+              depth + 1,
+            );
+            const connectorActive =
+              state === "completed" &&
+              (childState === "completed" ||
+                childState === "in_progress" ||
+                childState === "available");
+            return (
+              <div key={child.id}>
+                <ConnectorLine active={connectorActive} />
+                <BranchNode
+                  node={child}
+                  allNodes={allNodes}
+                  completedLessonIds={completedLessonIds}
+                  roadmapId={roadmapId}
+                  depth={depth + 1}
+                  itemVariants={itemVariants}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -240,18 +356,28 @@ interface BranchingLayoutProps {
   nodes: RoadmapNode[];
   completedLessonIds: string[];
   roadmapId: string;
+  itemVariants: Variants;
 }
 
-function BranchingLayout({ nodes, completedLessonIds, roadmapId }: BranchingLayoutProps) {
-  // Root nodes are those with no parentId
+function BranchingLayout({
+  nodes,
+  completedLessonIds,
+  roadmapId,
+  itemVariants,
+}: BranchingLayoutProps) {
   const rootNodes = nodes
     .filter((n) => !n.parentId)
     .sort((a, b) => a.order - b.order);
 
   return (
-    <div className="flex flex-col gap-8">
+    <motion.div
+      variants={listContainerVariants}
+      initial="hidden"
+      animate="visible"
+      className="flex flex-col gap-8"
+    >
       {rootNodes.map((node, index) => (
-        <div key={node.id}>
+        <motion.div key={node.id} variants={itemVariants}>
           {index > 0 && <ConnectorLine />}
           <BranchNode
             node={node}
@@ -259,10 +385,11 @@ function BranchingLayout({ nodes, completedLessonIds, roadmapId }: BranchingLayo
             completedLessonIds={completedLessonIds}
             roadmapId={roadmapId}
             depth={0}
+            itemVariants={itemVariants}
           />
-        </div>
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
 }
 
@@ -274,6 +401,9 @@ export function RoadmapNodeTree({
   roadmapId,
   complexity,
 }: NodeTreeProps) {
+  const reducedMotion = useReducedMotion();
+  const itemVariants = buildItemVariants(reducedMotion);
+
   if (!nodes || nodes.length === 0) return null;
 
   if (complexity === "linear") {
@@ -282,6 +412,7 @@ export function RoadmapNodeTree({
         nodes={nodes}
         completedLessonIds={completedLessonIds}
         roadmapId={roadmapId}
+        itemVariants={itemVariants}
       />
     );
   }
@@ -291,6 +422,7 @@ export function RoadmapNodeTree({
       nodes={nodes}
       completedLessonIds={completedLessonIds}
       roadmapId={roadmapId}
+      itemVariants={itemVariants}
     />
   );
 }
