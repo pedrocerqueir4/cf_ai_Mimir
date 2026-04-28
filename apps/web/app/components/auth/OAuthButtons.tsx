@@ -1,33 +1,53 @@
-import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
-import { Alert, AlertDescription } from "~/components/ui/alert";
+import { signIn } from "~/lib/auth-client";
+import { getRestorePath } from "~/lib/session";
 
 interface OAuthButtonsProps {
   mode: "sign-in" | "sign-up";
 }
 
+/**
+ * OAuth provider buttons (Google + GitHub).
+ *
+ * Wires `errorCallbackURL: "/auth/oauth-error"` into `signIn.social({...})`
+ * per RESEARCH.md Pattern 6 / CONTEXT.md D-04. Better Auth redirects to that
+ * URL with `?error=<code>` on OAuth failure; the new `/auth/oauth-error`
+ * route classifies the code into one of three UI-SPEC copy variants.
+ *
+ * Fallback path: per RESEARCH.md Assumption A2 (Better Auth issue #1580 —
+ * `errorCallbackURL` is sometimes ignored), the existing inline `?error=`
+ * Alert in `_auth.sign-in.tsx` covers the case where Better Auth redirects
+ * back to /auth/sign-in instead of /auth/oauth-error. Both paths in place.
+ *
+ * UX-04: `callbackURL` consumes the existing sessionStorage restore-path
+ * pattern from `~/lib/session.ts` so successful sign-in lands on the page
+ * the user was on before being redirected to auth.
+ */
 export function OAuthButtons({ mode: _mode }: OAuthButtonsProps) {
-  const [warning, setWarning] = useState(false);
-
-  function handleOAuthClick() {
-    setWarning(true);
-    setTimeout(() => setWarning(false), 4000);
+  async function handleOAuthClick(provider: "google" | "github") {
+    try {
+      await signIn.social({
+        provider,
+        callbackURL: getRestorePath() ?? "/",
+        errorCallbackURL: "/auth/oauth-error",
+      });
+    } catch {
+      // Defensive: signIn.social normally redirects (so this catch never fires
+      // in the happy path). If it throws synchronously (network error before
+      // the redirect lands), surface a toast — Better Auth's documented error
+      // flow is the redirect, not a thrown promise.
+      toast.error("Sign-in failed. Please try again.");
+    }
   }
 
   return (
     <div className="flex flex-col gap-3">
-      {warning && (
-        <Alert>
-          <AlertDescription>
-            Social sign-in is not available at the moment. Please use email and password.
-          </AlertDescription>
-        </Alert>
-      )}
       <Button
         type="button"
         variant="outline"
         className="min-h-12 w-full"
-        onClick={handleOAuthClick}
+        onClick={() => handleOAuthClick("google")}
       >
         {/* Google icon SVG — 20x20 */}
         <svg
@@ -58,7 +78,7 @@ export function OAuthButtons({ mode: _mode }: OAuthButtonsProps) {
         type="button"
         variant="outline"
         className="min-h-12 w-full"
-        onClick={handleOAuthClick}
+        onClick={() => handleOAuthClick("github")}
       >
         {/* GitHub icon SVG — 20x20 */}
         <svg
