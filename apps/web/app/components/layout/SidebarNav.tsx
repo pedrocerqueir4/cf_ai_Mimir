@@ -1,9 +1,12 @@
 import { Home, MessageCircle, Map, Swords, User } from "lucide-react";
 import { NavLink } from "react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
+import { LevelBadge } from "~/components/gamification/LevelBadge";
 import { ThemeToggle } from "./ThemeToggle";
 import { useSession } from "~/lib/auth-client";
-import { cn } from "~/lib/utils";
+import { fetchUserStats, type UserStats } from "~/lib/api-client";
+import { cn, getLocalTimezone } from "~/lib/utils";
 
 // 5 items per CONTEXT patterns_handoff item 1 (Chat preserved). Mirrors BottomNav.
 const NAV_ITEMS = [
@@ -16,13 +19,24 @@ const NAV_ITEMS = [
 
 export function SidebarNav() {
   // Pull display name + avatar from the existing Better Auth session hook
-  // (already used in _app.tsx + battle routes). Level requires a separate
-  // user_stats query that this sidebar doesn't currently own — wiring it
-  // is deferred to Plan 6 polish per the plan's acceptance criteria.
+  // (already used in _app.tsx + battle routes).
   const { data: session } = useSession();
   const displayName = (session?.user?.name as string | undefined) ?? null;
   const avatarUrl = (session?.user?.image as string | undefined) ?? null;
   const initial = displayName?.charAt(0).toUpperCase() ?? "?";
+
+  // Plan 06-06: wire `level` from the shared user-stats query.
+  // Same queryKey as Dashboard + Profile so TanStack Query caches one fetch.
+  // `enabled` keeps the query parked until the user is signed in (auth chassis
+  // doesn't render the sidebar, so this is just defensive for tests / SSR).
+  const tz = getLocalTimezone();
+  const { data: stats } = useQuery<UserStats>({
+    queryKey: ["user", "stats"],
+    queryFn: () => fetchUserStats(tz),
+    staleTime: 30_000,
+    enabled: !!session?.user,
+  });
+  const level = stats?.level ?? null;
 
   return (
     <nav
@@ -59,10 +73,8 @@ export function SidebarNav() {
       </div>
       {/*
         User block (UI-SPEC § Sidebar Nav user block):
-        Avatar + display name (truncated) + ThemeToggle on the right.
-        TODO Plan 6: wire `level` from the user_stats query and render <LevelBadge level={level} />
-        beneath the display name. Sidebar doesn't currently own that query so deferring per
-        plan acceptance criteria ("Do not block this plan on user-data wiring").
+        Avatar + display name (truncated) + LevelBadge below name + ThemeToggle on the right.
+        Plan 06-06 wired `level` via the shared `["user","stats"]` TanStack Query cache.
       */}
       <div className="mt-auto flex items-center gap-3 rounded-[var(--radius-md)] border border-[hsl(var(--border))] p-3">
         <Avatar className="h-9 w-9">
@@ -73,6 +85,11 @@ export function SidebarNav() {
           <p className="truncate text-sm font-medium text-foreground">
             {displayName ?? "Signed in"}
           </p>
+          {level !== null && (
+            <div className="mt-1">
+              <LevelBadge level={level} />
+            </div>
+          )}
         </div>
         <ThemeToggle />
       </div>

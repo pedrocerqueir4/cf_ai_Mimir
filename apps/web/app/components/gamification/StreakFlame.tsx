@@ -2,10 +2,10 @@
  * Phase 06 Plan 1 — net-new gamification primitive.
  *
  * Lucide Flame icon + day-count number with `streak-tick` motion on the
- * flame. Tints emerald when `alive`, ruby-soft when `!alive`. The
- * existing `StreakCounter.tsx` continues to work for static dashboards;
- * this component is the celebratory counterpart for the inline / toast
- * surfaces wired in later plans.
+ * flame. Tints emerald when `alive`, ruby-soft when `!alive`. This is
+ * the canonical streak surface across Dashboard + Profile (Phase 06
+ * Plan 03 retired the legacy `StreakCounter` wrapper; Plan 06-06
+ * deleted the unused file).
  */
 import { motion, useReducedMotion } from "framer-motion";
 import { Flame } from "lucide-react";
