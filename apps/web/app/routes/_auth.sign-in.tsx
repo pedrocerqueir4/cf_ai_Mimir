@@ -39,6 +39,9 @@ export default function SignInPage() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const reason = searchParams.get("reason");
+  // OAuth fallback: Better Auth issue #1580 — `errorCallbackURL` is sometimes
+  // ignored. When it is, the provider lands here with `?error=<code>` and the
+  // inline Alert below renders. RESEARCH.md Assumption A2.
   const oauthError = searchParams.get("error");
 
   const form = useForm<SignInInput>({
@@ -89,7 +92,10 @@ export default function SignInPage() {
         }
 
         if (status === 401 || status === 400) {
-          setServerError("Incorrect email or password.");
+          // UI-SPEC § Copywriting Contract — Error — Auth invalid copy lock.
+          setServerError(
+            "Email or password incorrect. Try again or reset your password."
+          );
         } else if (status === 429) {
           setServerError(
             "Too many attempts. Wait a few minutes before trying again."
@@ -115,132 +121,148 @@ export default function SignInPage() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl font-semibold">Welcome back</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        {/* D-06: OAuth error query param */}
-        {oauthError && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Sign-in failed. The provider returned an error. Please try again.
-            </AlertDescription>
-          </Alert>
-        )}
+    <div className="flex flex-col">
+      {/* MIMIR brand mark — UI-SPEC § Auth Screens display-sm Rubik Mono One. */}
+      <div className="mb-8 flex justify-center">
+        <span className="font-display text-[22px] tracking-tight text-foreground">
+          MIMIR
+        </span>
+      </div>
 
-        {/* Session expired banner */}
-        {reason === "session_expired" && (
-          <Alert>
-            <AlertDescription>
-              Your session expired. Sign in to continue.
-            </AlertDescription>
-          </Alert>
-        )}
+      <Card className="w-full max-w-[480px]">
+        <CardHeader>
+          <CardTitle className="text-[22px] font-semibold leading-[1.25] -tracking-[0.005em]">
+            Welcome back
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          {/* OAuth fallback Alert — preserved per RESEARCH.md A2 (Better Auth #1580).
+              When `errorCallbackURL` is ignored, users land here with `?error=`. */}
+          {oauthError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Sign-in failed. The provider returned an error. Please try again.
+              </AlertDescription>
+            </Alert>
+          )}
 
-        <OAuthButtons mode="sign-in" />
+          {/* Session expired banner */}
+          {reason === "session_expired" && (
+            <Alert>
+              <AlertDescription>
+                Your session expired. Sign in to continue.
+              </AlertDescription>
+            </Alert>
+          )}
 
-        <div className="flex items-center gap-4">
-          <Separator className="flex-1" />
-          <span className="text-sm text-muted-foreground">or</span>
-          <Separator className="flex-1" />
-        </div>
+          <OAuthButtons mode="sign-in" />
 
-        {serverError && (
-          <Alert variant="destructive">
-            <AlertDescription>{serverError}</AlertDescription>
-          </Alert>
-        )}
+          <div className="flex items-center gap-4">
+            <Separator className="flex-1" />
+            <span className="text-sm text-muted-foreground">or</span>
+            <Separator className="flex-1" />
+          </div>
 
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            aria-busy={isLoading}
-            className="flex flex-col gap-4"
-          >
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="you@example.com"
-                      autoFocus
-                      autoComplete="email"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="password"
-                      placeholder="Your password"
-                      autoComplete="current-password"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                  <div className="text-right">
-                    <Link
-                      to="/auth/forgot-password"
-                      className="text-sm text-primary underline-offset-4 hover:underline"
-                    >
-                      Forgot your password?
-                    </Link>
-                  </div>
-                </FormItem>
-              )}
-            />
-
-            {/* D-05: Turnstile CAPTCHA shown when server requires it */}
-            {turnstileRequired && (
-              <TurnstileWidget
-                onSuccess={(token) => setTurnstileToken(token)}
-                onError={() => setTurnstileToken(null)}
-              />
+          {/* Error summary above form — UI-SPEC § Auth A11y aria-live="polite". */}
+          <div aria-live="polite">
+            {serverError && (
+              <Alert variant="destructive">
+                <AlertDescription>{serverError}</AlertDescription>
+              </Alert>
             )}
+          </div>
 
-            <Button
-              type="submit"
-              className="min-h-12 w-full"
-              disabled={isLoading || (turnstileRequired && !turnstileToken)}
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              aria-busy={isLoading}
+              className="flex flex-col gap-4"
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                "Sign in"
-              )}
-            </Button>
-          </form>
-        </Form>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="you@example.com"
+                        autoFocus
+                        autoComplete="email"
+                        aria-invalid={fieldState.invalid || undefined}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-        <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <Link
-            to="/auth/sign-up"
-            className="text-primary underline-offset-4 hover:underline"
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder="Your password"
+                        autoComplete="current-password"
+                        aria-invalid={fieldState.invalid || undefined}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                    <div className="text-right">
+                      <Link
+                        to="/auth/forgot-password"
+                        className="text-sm text-primary underline-offset-4 hover:underline"
+                      >
+                        Forgot your password?
+                      </Link>
+                    </div>
+                  </FormItem>
+                )}
+              />
+
+              {/* D-05: Turnstile CAPTCHA shown when server requires it */}
+              {turnstileRequired && (
+                <TurnstileWidget
+                  onSuccess={(token) => setTurnstileToken(token)}
+                  onError={() => setTurnstileToken(null)}
+                />
+              )}
+
+              <Button
+                type="submit"
+                className="min-h-12 w-full"
+                disabled={isLoading || (turnstileRequired && !turnstileToken)}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign in"
+                )}
+              </Button>
+            </form>
+          </Form>
+
+          {/* Secondary link — Button ghost full-width per UI-SPEC § Auth Screens. */}
+          <Button
+            asChild
+            variant="ghost"
+            className="min-h-12 w-full"
           >
-            Create one
-          </Link>
-        </p>
-      </CardContent>
-    </Card>
+            <Link to="/auth/sign-up">Create account</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

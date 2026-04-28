@@ -48,8 +48,8 @@ export default function ForgotPasswordPage() {
         email: values.email,
         redirectTo: "/auth/reset-password",
       });
-      // Always show success state regardless of whether email exists
-      // (prevents email enumeration)
+      // Phase 01 lock: always show success state regardless of whether the
+      // email exists — prevents email enumeration. Do not change.
       setSubmittedEmail(values.email);
     } catch {
       setServerError(
@@ -60,104 +60,121 @@ export default function ForgotPasswordPage() {
     }
   }
 
-  // Success state
+  // Success state — Phase 01 enumeration-prevention lock.
   if (submittedEmail) {
     return (
-      <Card>
-        <CardHeader>
-          <div className="flex justify-center mb-2">
-            <Mail className="h-10 w-10 text-primary" />
-          </div>
-          <CardTitle className="text-xl font-semibold text-center">
-            Check your email
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          <p className="text-sm text-muted-foreground text-center">
-            We&apos;ve sent a password reset link to{" "}
-            <span className="font-medium text-foreground">{submittedEmail}</span>
-            . Check your inbox and follow the link to reset your password.
-          </p>
-          <Link
-            to="/auth/sign-in"
-            className="text-center text-sm text-primary underline-offset-4 hover:underline"
-          >
-            Back to sign in
-          </Link>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col">
+        {/* MIMIR brand mark — UI-SPEC § Auth Screens. */}
+        <div className="mb-8 flex justify-center">
+          <span className="font-display text-[22px] tracking-tight text-foreground">
+            MIMIR
+          </span>
+        </div>
+
+        <Card className="w-full max-w-[480px]">
+          <CardHeader>
+            <div className="mb-2 flex justify-center">
+              <Mail className="h-10 w-10 text-primary" />
+            </div>
+            <CardTitle className="text-center text-[22px] font-semibold leading-[1.25] -tracking-[0.005em]">
+              Check your email
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            <p className="text-center text-sm text-[hsl(var(--fg-muted))]">
+              We&apos;ve sent a password reset link to{" "}
+              <span className="font-medium text-foreground">{submittedEmail}</span>
+              . Check your inbox and follow the link to reset your password.
+            </p>
+            <Button asChild variant="ghost" className="min-h-12 w-full">
+              <Link to="/auth/sign-in">Back to sign in</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl font-semibold">
-          Reset your password
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        <p className="text-sm text-muted-foreground">
-          Enter your email address and we&apos;ll send you a link to reset your
-          password.
-        </p>
+    <div className="flex flex-col">
+      {/* MIMIR brand mark — UI-SPEC § Auth Screens. */}
+      <div className="mb-8 flex justify-center">
+        <span className="font-display text-[22px] tracking-tight text-foreground">
+          MIMIR
+        </span>
+      </div>
 
-        {serverError && (
-          <Alert variant="destructive">
-            <AlertDescription>{serverError}</AlertDescription>
-          </Alert>
-        )}
+      <Card className="w-full max-w-[480px]">
+        <CardHeader>
+          <CardTitle className="text-[22px] font-semibold leading-[1.25] -tracking-[0.005em]">
+            Reset your password
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          <p className="text-sm text-[hsl(var(--fg-muted))]">
+            Enter your email address and we&apos;ll send you a link to reset your
+            password.
+          </p>
 
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            aria-busy={isLoading}
-            className="flex flex-col gap-4"
-          >
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="you@example.com"
-                      autoFocus
-                      autoComplete="email"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          {/* Error summary above form — UI-SPEC § Auth A11y aria-live="polite". */}
+          <div aria-live="polite">
+            {serverError && (
+              <Alert variant="destructive">
+                <AlertDescription>{serverError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
 
-            <Button
-              type="submit"
-              className="min-h-12 w-full"
-              disabled={isLoading}
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              aria-busy={isLoading}
+              className="flex flex-col gap-4"
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending...
-                </>
-              ) : (
-                "Send reset link"
-              )}
-            </Button>
-          </form>
-        </Form>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="you@example.com"
+                        autoFocus
+                        autoComplete="email"
+                        aria-invalid={fieldState.invalid || undefined}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-        <Link
-          to="/auth/sign-in"
-          className="text-center text-sm text-primary underline-offset-4 hover:underline"
-        >
-          Back to sign in
-        </Link>
-      </CardContent>
-    </Card>
+              <Button
+                type="submit"
+                className="min-h-12 w-full"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  "Send reset link"
+                )}
+              </Button>
+            </form>
+          </Form>
+
+          {/* Secondary link — Button ghost full-width per UI-SPEC § Auth Screens. */}
+          <Button asChild variant="ghost" className="min-h-12 w-full">
+            <Link to="/auth/sign-in">Back to sign in</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
