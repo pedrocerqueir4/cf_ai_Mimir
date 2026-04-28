@@ -114,7 +114,7 @@ export function RoadmapRevealScreen({
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
-        className="mb-8 text-xl font-semibold leading-tight"
+        className="mb-8 text-[22px] font-semibold leading-[1.25] -tracking-[0.005em]"
       >
         {heading}
       </motion.h1>

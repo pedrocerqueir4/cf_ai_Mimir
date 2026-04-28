@@ -79,20 +79,27 @@ export function InLessonQASheet({
         role="dialog"
         ref={inputRef}
       >
+        {/* Drag handle — UI-SPEC § Q&A Bottom Sheet */}
+        <div
+          aria-hidden="true"
+          className="mx-auto h-1 w-12 rounded-full bg-[hsl(var(--border-strong))] my-2 shrink-0"
+        />
+
         {/* Sheet header */}
-        <SheetHeader className="px-4 pt-4 pb-2 border-b border-border shrink-0">
-          <SheetTitle className="text-base font-semibold">
+        <SheetHeader className="px-4 pt-2 pb-2 border-b border-[hsl(var(--border))] shrink-0">
+          <SheetTitle className="text-[16px] font-semibold leading-[1.5]">
             Lesson Q&A
           </SheetTitle>
         </SheetHeader>
 
-        {/* Q&A thread — fills remaining height */}
+        {/* Q&A thread — fills remaining height; placeholder copy lock per
+            UI-SPEC § Copywriting Contract empty Q&A row. */}
         <div className="flex-1 min-h-0 flex flex-col">
           <QAThread
             roadmapId={roadmapId}
             lessonId={lessonId}
-            placeholder="Ask about this lesson..."
-            emptyText="Ask anything about this lesson's content."
+            placeholder="Ask Mimir anything about this lesson."
+            emptyText="Ask Mimir anything about this lesson."
             onCitationClick={handleCitationClick}
           />
         </div>

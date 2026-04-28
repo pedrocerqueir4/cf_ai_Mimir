@@ -97,7 +97,7 @@ export function WagerRevealScreen({
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
-        className="mb-8 text-xl font-semibold leading-tight"
+        className="mb-8 text-[22px] font-semibold leading-[1.25] -tracking-[0.005em]"
       >
         {heading}
       </motion.h1>
@@ -116,7 +116,7 @@ export function WagerRevealScreen({
           >
             <span
               className={cn(
-                "text-[28px] font-semibold leading-none tabular-nums lg:text-[40px]",
+                "font-display text-[28px] leading-[1.15] tabular-nums lg:text-[36px]",
                 isActive ? "text-foreground" : "text-muted-foreground",
               )}
             >

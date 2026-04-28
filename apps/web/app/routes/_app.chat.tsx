@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Send, Loader2, Check, CheckCircle } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 
 import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -161,11 +162,11 @@ function GenerationProgressBubble({
     return (
       <div className="flex items-start gap-3">
         <Avatar className="h-8 w-8 shrink-0">
-          <AvatarFallback className="text-xs text-muted-foreground">AI</AvatarFallback>
+          <AvatarFallback className="text-[12px] text-[hsl(var(--fg-muted))]">AI</AvatarFallback>
         </Avatar>
-        <div className="max-w-[80%] rounded-2xl rounded-tl-sm border border-destructive bg-card p-4">
-          <p className="text-sm text-destructive">
-            Roadmap generation failed. Try describing your topic again or rephrase your request.
+        <div className="max-w-[80%] rounded-[var(--radius-lg)] rounded-tl-sm border border-[hsl(var(--destructive))] bg-[hsl(var(--bg-elevated))] p-4">
+          <p className="text-[14px] leading-[1.5] text-[hsl(var(--destructive))]">
+            Mimir couldn&apos;t generate this. Try rewording your topic.
           </p>
         </div>
       </div>
@@ -175,9 +176,9 @@ function GenerationProgressBubble({
   return (
     <div className="flex items-start gap-3">
       <Avatar className="h-8 w-8 shrink-0">
-        <AvatarFallback className="text-xs text-muted-foreground">AI</AvatarFallback>
+        <AvatarFallback className="text-[12px] text-[hsl(var(--fg-muted))]">AI</AvatarFallback>
       </Avatar>
-      <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-card p-4">
+      <div className="max-w-[80%] rounded-[var(--radius-lg)] rounded-tl-sm bg-[hsl(var(--bg-elevated))] border border-[hsl(var(--border))] p-4">
         {!isComplete ? (
           <div aria-live="polite" className="flex flex-col gap-2">
             {GENERATION_STEPS.map((stepLabel, index) => {
@@ -193,19 +194,19 @@ function GenerationProgressBubble({
                   {isDone ? (
                     <Check
                       size={16}
-                      className="shrink-0 text-primary"
+                      className="shrink-0 text-[hsl(var(--success))]"
                       aria-hidden="true"
                     />
                   ) : isActive ? (
                     <Loader2
                       size={16}
-                      className="shrink-0 animate-spin text-primary"
+                      className="shrink-0 animate-spin text-[hsl(var(--dominant))]"
                       aria-hidden="true"
                     />
                   ) : (
                     <div className="h-4 w-4 shrink-0" aria-hidden="true" />
                   )}
-                  <span className="text-sm text-muted-foreground">{stepLabel}</span>
+                  <span className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]">{stepLabel}</span>
                 </div>
               );
             })}
@@ -213,11 +214,15 @@ function GenerationProgressBubble({
         ) : (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
-              <CheckCircle size={16} className="shrink-0 text-primary" aria-hidden="true" />
-              <span className="text-sm font-medium">Your roadmap is ready.</span>
+              <CheckCircle
+                size={16}
+                className="shrink-0 text-[hsl(var(--success))]"
+                aria-hidden="true"
+              />
+              <span className="text-[14px] font-medium leading-[1.5]">Your roadmap is ready.</span>
             </div>
             <Button
-              variant="default"
+              variant="jewel"
               size="sm"
               onClick={() => completedRoadmapId && navigate(`/roadmaps/${completedRoadmapId}`)}
             >
@@ -236,20 +241,20 @@ function TypingIndicator() {
   return (
     <div className="flex items-start gap-3" aria-label="AI is thinking">
       <Avatar className="h-8 w-8 shrink-0">
-        <AvatarFallback className="text-xs text-muted-foreground">AI</AvatarFallback>
+        <AvatarFallback className="text-[12px] text-[hsl(var(--fg-muted))]">AI</AvatarFallback>
       </Avatar>
-      <div className="rounded-2xl rounded-tl-sm bg-card p-4">
+      <div className="rounded-[var(--radius-lg)] rounded-tl-sm bg-[hsl(var(--bg-elevated))] border border-[hsl(var(--border))] p-4">
         <div className="flex gap-1">
           <span
-            className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground"
+            className="h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--fg-muted))] motion-reduce:animate-none"
             style={{ animationDelay: "0ms" }}
           />
           <span
-            className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground"
+            className="h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--fg-muted))] motion-reduce:animate-none"
             style={{ animationDelay: "150ms" }}
           />
           <span
-            className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground"
+            className="h-2 w-2 animate-pulse rounded-full bg-[hsl(var(--fg-muted))] motion-reduce:animate-none"
             style={{ animationDelay: "300ms" }}
           />
         </div>
@@ -266,6 +271,7 @@ interface MessageBubbleProps {
 
 function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
+  const reducedMotion = useReducedMotion();
   const formattedTime = new Date(message.createdAt).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
@@ -280,29 +286,55 @@ function MessageBubble({ message }: MessageBubbleProps) {
     return null;
   }
 
+  // UI-SPEC § Chat — new messages slide+fade in (page-transition semantics).
+  // Reduced motion: opacity-only.
+  const enterAnim = reducedMotion
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        transition: { duration: 0.12 },
+      }
+    : {
+        initial: { opacity: 0, y: 8 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.2, ease: [0.4, 0, 0.2, 1] as const },
+      };
+
   if (isUser) {
     return (
-      <div className="flex flex-col items-end gap-1">
-        <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-foreground/8 p-4">
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+      <motion.div {...enterAnim} className="flex flex-col items-end gap-1">
+        {/* User bubble — --dominant-soft per UI-SPEC § Chat */}
+        <div className="max-w-[80%] rounded-[var(--radius-lg)] rounded-tr-sm bg-[hsl(var(--dominant-soft))] text-[hsl(var(--dominant))] p-4">
+          <p className="text-[16px] leading-[1.5] whitespace-pre-wrap">
+            {message.content}
+          </p>
         </div>
-        <span className="text-xs text-muted-foreground">{formattedTime}</span>
-      </div>
+        <span className="text-[12px] leading-[1.4] text-[hsl(var(--fg-muted))]">
+          {formattedTime}
+        </span>
+      </motion.div>
     );
   }
 
   return (
-    <div className="flex flex-col items-start gap-1">
+    <motion.div {...enterAnim} className="flex flex-col items-start gap-1">
       <div className="flex items-start gap-3">
         <Avatar className="h-8 w-8 shrink-0">
-          <AvatarFallback className="text-xs text-muted-foreground">AI</AvatarFallback>
+          <AvatarFallback className="text-[12px] text-[hsl(var(--fg-muted))]">
+            AI
+          </AvatarFallback>
         </Avatar>
-        <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-card p-4">
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+        {/* AI bubble — --bg-elevated per UI-SPEC § Chat */}
+        <div className="max-w-[80%] rounded-[var(--radius-lg)] rounded-tl-sm bg-[hsl(var(--bg-elevated))] border border-[hsl(var(--border))] p-4">
+          <p className="text-[16px] leading-[1.5] whitespace-pre-wrap">
+            {message.content}
+          </p>
         </div>
       </div>
-      <span className="ml-11 text-xs text-muted-foreground">{formattedTime}</span>
-    </div>
+      <span className="ml-11 text-[12px] leading-[1.4] text-[hsl(var(--fg-muted))]">
+        {formattedTime}
+      </span>
+    </motion.div>
   );
 }
 
@@ -690,10 +722,10 @@ export default function ChatPage() {
             /* Empty state */
             <div className="flex h-[calc(100vh-12rem)] items-center justify-center">
               <div className="max-w-sm text-center">
-                <h1 className="text-xl font-semibold leading-tight">
+                <h1 className="text-[22px] font-semibold leading-[1.25] -tracking-[0.005em]">
                   What do you want to learn?
                 </h1>
-                <p className="mt-3 text-base text-muted-foreground">
+                <p className="mt-3 text-[16px] leading-[1.5] text-[hsl(var(--fg-muted))]">
                   Describe any topic and I&apos;ll build a personalized learning roadmap for you.
                 </p>
               </div>
@@ -726,8 +758,10 @@ export default function ChatPage() {
         </div>
       </ScrollArea>
 
-      {/* Fixed input bar — above bottom nav on mobile */}
-      <div className="fixed bottom-16 left-0 right-0 z-40 border-t border-border bg-background px-4 py-3 lg:static lg:bottom-0 lg:border-t lg:px-4 lg:py-3">
+      {/* Sticky frosted composer — UI-SPEC § Chat. Fixed above BottomNav on
+          mobile (bottom-16); static (sticky bottom-0) on lg+. Frosted +
+          backdrop-blur fallback for unsupported browsers. */}
+      <div className="fixed bottom-16 left-0 right-0 z-40 border-t border-[hsl(var(--border))] bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card px-4 py-3 lg:static lg:bottom-0 lg:px-4 lg:py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
         <div className="flex items-end gap-3">
           <label htmlFor="chat-input" className="sr-only">
             Message
@@ -742,7 +776,7 @@ export default function ChatPage() {
             rows={1}
             disabled={isInputDisabled}
             aria-label="Chat message input"
-            className="min-h-12 flex-1 resize-none rounded-md border border-input bg-background px-3 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="min-h-12 flex-1 resize-none rounded-[var(--radius-md)] border border-[hsl(var(--border))] bg-[hsl(var(--bg-subtle))] px-3 py-3 text-[16px] leading-[1.5] ring-offset-background placeholder:text-[hsl(var(--fg-subtle))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             style={{ maxHeight: "6rem", overflowY: "auto" }}
           />
           <Button

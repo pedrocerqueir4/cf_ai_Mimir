@@ -94,7 +94,7 @@ function AnswerContent({
               key={i}
               role="link"
               tabIndex={0}
-              className="text-sm text-primary underline-offset-2 hover:underline cursor-pointer"
+              className="text-[14px] leading-[1.5] text-[hsl(var(--dominant))] underline-offset-2 hover:underline cursor-pointer"
               onClick={() => handleCitationClick(citation)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -117,17 +117,17 @@ function AnswerContent({
 
 function TypingIndicator() {
   return (
-    <div className="flex items-center gap-1 px-4 py-3 bg-card rounded-2xl rounded-tl-sm w-fit max-w-[80%]">
+    <div className="flex items-center gap-1 px-4 py-3 bg-[hsl(var(--bg-elevated))] border border-[hsl(var(--border))] rounded-[var(--radius-lg)] rounded-tl-sm w-fit max-w-[80%]">
       <span
-        className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce"
+        className="w-1.5 h-1.5 bg-[hsl(var(--fg-muted))] rounded-full animate-bounce motion-reduce:animate-none"
         style={{ animationDelay: "0ms" }}
       />
       <span
-        className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce"
+        className="w-1.5 h-1.5 bg-[hsl(var(--fg-muted))] rounded-full animate-bounce motion-reduce:animate-none"
         style={{ animationDelay: "150ms" }}
       />
       <span
-        className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce"
+        className="w-1.5 h-1.5 bg-[hsl(var(--fg-muted))] rounded-full animate-bounce motion-reduce:animate-none"
         style={{ animationDelay: "300ms" }}
       />
     </div>
@@ -220,10 +220,10 @@ export function QAThread({
       {/* Message area */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
         <div className="px-4 py-4 flex flex-col gap-3">
-          {/* Empty state */}
+          {/* Empty state — copy lock per UI-SPEC § Copywriting Contract */}
           {isEmpty && (
             <div className="flex items-center justify-center h-32">
-              <p className="text-base text-muted-foreground text-center">
+              <p className="text-[16px] leading-[1.5] text-[hsl(var(--fg-muted))] text-center">
                 {emptyText}
               </p>
             </div>
@@ -234,23 +234,24 @@ export function QAThread({
             if (msg.role === "user") {
               return (
                 <div key={msg.id} className="flex justify-end">
-                  <div className="px-4 py-3 bg-foreground/8 rounded-2xl rounded-tr-sm max-w-[80%]">
-                    <p className="text-base">{msg.content}</p>
+                  {/* User bubble — --dominant-soft per UI-SPEC § Q&A Bottom Sheet */}
+                  <div className="px-4 py-3 bg-[hsl(var(--dominant-soft))] text-[hsl(var(--dominant))] rounded-[var(--radius-lg)] rounded-tr-sm max-w-[80%]">
+                    <p className="text-[16px] leading-[1.5]">{msg.content}</p>
                   </div>
                 </div>
               );
             }
 
-            // Assistant message
+            // Assistant message — --bg-elevated bubble
             return (
               <div key={msg.id} className="flex justify-start">
                 <div
                   className={cn(
-                    "px-4 py-3 bg-card rounded-2xl rounded-tl-sm max-w-[80%]",
-                    msg.isError && "border border-destructive"
+                    "px-4 py-3 bg-[hsl(var(--bg-elevated))] border border-[hsl(var(--border))] rounded-[var(--radius-lg)] rounded-tl-sm max-w-[80%]",
+                    msg.isError && "border-[hsl(var(--destructive))]",
                   )}
                 >
-                  <p className="text-base">
+                  <p className="text-[16px] leading-[1.5]">
                     <AnswerContent
                       content={msg.content}
                       citations={msg.citations ?? []}
@@ -259,7 +260,7 @@ export function QAThread({
                     />
                   </p>
 
-                  {/* Inline citation list below answer */}
+                  {/* Citation chips below answer */}
                   {msg.citations && msg.citations.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {msg.citations.map((c) => (
@@ -286,8 +287,8 @@ export function QAThread({
         </div>
       </ScrollArea>
 
-      {/* Fixed bottom input bar */}
-      <div className="px-4 py-3 border-t border-border flex items-center gap-2 bg-background">
+      {/* Sticky frosted input row at bottom of sheet — UI-SPEC § Q&A Bottom Sheet */}
+      <div className="sticky bottom-0 px-4 py-3 border-t border-[hsl(var(--border))] flex items-center gap-2 bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card">
         <Input
           ref={inputRef}
           value={inputValue}
@@ -338,7 +339,13 @@ function CitationTag({
     <a
       role="link"
       tabIndex={0}
-      className="text-sm text-primary underline-offset-2 hover:underline cursor-pointer"
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5",
+        "bg-[hsl(var(--dominant-soft))] text-[hsl(var(--dominant))]",
+        "text-[12px] font-medium leading-[1.3] tracking-[0.01em]",
+        "hover:underline cursor-pointer",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]",
+      )}
       onClick={handleClick}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -347,7 +354,7 @@ function CitationTag({
         }
       }}
     >
-      [Lesson {citation.lessonOrder}: {citation.lessonTitle}]
+      Lesson {citation.lessonOrder}: {citation.lessonTitle}
     </a>
   );
 }
