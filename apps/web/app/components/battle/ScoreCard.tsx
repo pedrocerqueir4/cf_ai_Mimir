@@ -1,5 +1,11 @@
 import { useEffect } from "react";
-import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import {
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useSpring,
+  useTransform,
+} from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { Card } from "~/components/ui/card";
 import { cn } from "~/lib/utils";
@@ -49,8 +55,16 @@ export function ScoreCard({
 
   // Animate the displayed number via spring — triggered by score-prop change
   // (which only happens on `reveal` event dispatch per UI-SPEC).
+  // Plan 06-06 audit fix: under prefers-reduced-motion the score snaps to
+  // the new value (stiffness/damping bumped so the spring resolves in <1
+  // frame). This matches UI-SPEC § Motion `xp-gain` reduced-motion contract
+  // ("Number snaps to new value, halo replaced with bg-success-soft flash").
+  const prefersReducedMotion = useReducedMotion();
   const motionValue = useMotionValue(score);
-  const spring = useSpring(motionValue, { stiffness: 100, damping: 20 });
+  const spring = useSpring(motionValue, {
+    stiffness: prefersReducedMotion ? 10000 : 100,
+    damping: prefersReducedMotion ? 100 : 20,
+  });
   const rounded = useTransform(spring, (v) => Math.max(0, Math.round(v)));
 
   useEffect(() => {

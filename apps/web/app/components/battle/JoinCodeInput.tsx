@@ -4,7 +4,7 @@ import {
   useEffect,
   useRef,
 } from "react";
-import { motion, useAnimationControls } from "framer-motion";
+import { motion, useAnimationControls, useReducedMotion } from "framer-motion";
 import { cn } from "~/lib/utils";
 
 export const JOIN_CODE_LENGTH = 6;
@@ -33,6 +33,11 @@ export function JoinCodeInput({
 }: JoinCodeInputProps) {
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const controls = useAnimationControls();
+  // Plan 06-06 audit fix: gate the error shake on `prefers-reduced-motion`.
+  // The destructive border (rendered via the parent route's input class)
+  // remains as the non-motion signal, satisfying UI-SPEC's reduced-motion
+  // contract while keeping the visual error state fully observable.
+  const prefersReducedMotion = useReducedMotion();
   const prevErrorRef = useRef<string | null | undefined>(error);
 
   // Normalize value to fixed-length char array
@@ -49,17 +54,18 @@ export function JoinCodeInput({
     }
   }, [autoFocus]);
 
-  // Trigger shake when `error` transitions from falsy to truthy
+  // Trigger shake when `error` transitions from falsy to truthy.
+  // Reduced-motion users get the destructive border only (no shake).
   useEffect(() => {
     const prev = prevErrorRef.current;
-    if (error && !prev) {
+    if (error && !prev && !prefersReducedMotion) {
       controls.start({
         x: [-4, 4, -4, 4, 0],
         transition: { duration: 0.4, ease: "easeInOut" },
       });
     }
     prevErrorRef.current = error;
-  }, [error, controls]);
+  }, [error, controls, prefersReducedMotion]);
 
   const focusBox = (index: number) => {
     const clamped = Math.max(0, Math.min(JOIN_CODE_LENGTH - 1, index));
