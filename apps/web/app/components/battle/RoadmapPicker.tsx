@@ -32,7 +32,7 @@ export function RoadmapPicker({
     <section aria-labelledby="roadmap-picker-heading">
       <h2
         id="roadmap-picker-heading"
-        className="text-xl font-semibold leading-tight mb-3"
+        className="text-[22px] font-semibold leading-[1.25] -tracking-[0.005em] mb-3"
       >
         {heading}
       </h2>
@@ -67,30 +67,35 @@ export function RoadmapPicker({
                   onClick={() => onSelect(roadmap.id)}
                   className={cn(
                     "block w-full text-left",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] rounded-[var(--radius-lg)]",
                   )}
                 >
                   <Card
                     className={cn(
                       "min-h-16 p-4 transition-colors",
                       isSelected
-                        ? "border-2 border-primary"
-                        : "border border-border hover:bg-muted/30",
+                        ? "border-2 border-[hsl(var(--dominant))] bg-[hsl(var(--dominant-soft))]"
+                        : "border border-[hsl(var(--border))] hover:bg-[hsl(var(--bg-subtle))]",
                     )}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <p className="text-base font-semibold leading-snug truncate">
+                        <p
+                          className={cn(
+                            "text-[18px] font-medium leading-[1.3] truncate",
+                            isSelected && "text-[hsl(var(--dominant))]",
+                          )}
+                        >
                           {roadmap.title}
                         </p>
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <p className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))] mt-1">
                           {roadmap.completedLessons} of {roadmap.totalLessons}{" "}
                           lessons complete &middot; {percent}%
                         </p>
                       </div>
                       {isSelected && (
                         <Check
-                          className="h-5 w-5 text-primary shrink-0"
+                          className="h-5 w-5 text-[hsl(var(--dominant))] shrink-0"
                           aria-hidden="true"
                         />
                       )}

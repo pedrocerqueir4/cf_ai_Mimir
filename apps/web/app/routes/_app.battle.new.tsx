@@ -81,16 +81,16 @@ export default function BattleNewPage() {
     <div className="px-4 pt-6 pb-24 mx-auto max-w-[480px]">
       <Link
         to="/battle"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground min-h-12"
+        className="inline-flex items-center gap-1 text-[14px] text-[hsl(var(--fg-muted))] min-h-12"
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         Back
       </Link>
 
-      <h1 className="text-xl font-semibold leading-tight mt-2 mb-1">
+      <h1 className="text-[28px] font-semibold leading-[1.2] -tracking-[0.01em] lg:text-[36px] mt-2 mb-2">
         Create battle
       </h1>
-      <p className="text-base text-muted-foreground leading-snug mb-6">
+      <p className="text-[16px] leading-[1.5] text-[hsl(var(--fg-muted))] mb-8">
         Pick a topic you&apos;ve studied, set the length, and share the code.
       </p>
 
@@ -140,12 +140,16 @@ export default function BattleNewPage() {
         />
 
         {errorMsg && (
-          <p role="alert" className="text-sm text-destructive">
+          <p
+            role="alert"
+            className="text-[14px] leading-[1.5] text-[hsl(var(--destructive))]"
+          >
             {errorMsg}
           </p>
         )}
 
         <Button
+          variant="jewel"
           className="min-h-12"
           disabled={!canSubmit}
           onClick={handleSubmit}

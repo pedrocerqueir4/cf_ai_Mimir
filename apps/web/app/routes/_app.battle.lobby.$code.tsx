@@ -208,38 +208,67 @@ function LobbyInner({
     countdown.totalMs > 0 &&
     countdown.totalMs <= COUNTDOWN_DESTRUCTIVE_THRESHOLD_MS;
 
+  // Host-side "Start battle" CTA — visible to host once guest has joined
+  // (status === 'pre-battle'). Auto-navigation triggers on the same condition,
+  // so the button is a UX courtesy that mirrors UI-SPEC § Battle Lobby's
+  // "jewel Start battle host control" lock. The jump itself is owned by
+  // the same effect that already drives auto-advance.
+  const isHost = currentUserId != null && lobby?.hostId === currentUserId;
+  const guestJoined = !!lobby && !!lobby.guestId;
+  const handleStartBattle = useCallback(() => {
+    if (!lobby || !guestJoined) return;
+    navigateTo(`/battle/pre/${encodeURIComponent(battleId)}`, {
+      state: {
+        battleId,
+        winningRoadmapId: lobby.winningRoadmapId,
+        winningTopic: lobby.winningTopic,
+        poolStatus: lobby.poolStatus,
+      },
+    });
+  }, [lobby, guestJoined, battleId, navigateTo]);
+
   return (
     <div className="px-4 pt-6 pb-24 mx-auto max-w-[480px]">
       <Link
         to="/battle"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground min-h-12"
+        className="inline-flex items-center gap-1 text-[14px] text-[hsl(var(--fg-muted))] min-h-12"
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         Back
       </Link>
 
-      <h1 className="text-xl font-semibold leading-tight mt-2 mb-6">
+      <h1 className="text-[28px] font-semibold leading-[1.2] -tracking-[0.01em] lg:text-[36px] mt-2 mb-6">
         Waiting for opponent
       </h1>
 
-      {/* Code display */}
+      {/* Code chip — display-sm Rubik Mono One on amethyst-soft chip per
+          UI-SPEC § Battle Lobby. <output role="status"> announces the code
+          to assistive tech (UI-SPEC § Accessibility). */}
       <Card className="mb-6">
         <CardContent className="p-6 flex flex-col items-center gap-3">
-          <p className="text-sm text-muted-foreground">Share this code</p>
-          <p
-            className={cn(
-              "text-[28px] font-semibold leading-[1.15] tabular-nums lg:text-[40px]",
-              "tracking-[0.35em]",
-            )}
+          <p className="text-[12px] leading-[1.4] tracking-[0.005em] text-[hsl(var(--fg-muted))]">
+            Share this code
+          </p>
+          <output
+            role="status"
             aria-label={`Battle code ${displayCode.split("").join(" ")}`}
+            className={cn(
+              "inline-flex items-center rounded-[var(--radius-md)] bg-[hsl(var(--dominant-soft))] px-6 py-3",
+              "font-display tabular-nums text-[22px] leading-[1.15] lg:text-[28px]",
+              "tracking-[0.25em] text-[hsl(var(--dominant))]",
+            )}
           >
             {displayCode}
-          </p>
+          </output>
         </CardContent>
       </Card>
 
       <div className="flex flex-col gap-3">
-        <Button onClick={handleCopy} className="min-h-12 w-full">
+        <Button
+          variant="outline"
+          onClick={handleCopy}
+          className="min-h-12 w-full"
+        >
           {copied ? (
             <>
               <Check className="h-4 w-4 mr-2" aria-hidden="true" />
@@ -252,7 +281,6 @@ function LobbyInner({
             </>
           )}
         </Button>
-
       </div>
 
       {/* Plan 04-11, Task 4: Participants (host + guest) as ParticipantCard
@@ -279,36 +307,55 @@ function LobbyInner({
             isSelf={currentUserId != null && lobby.guestId === currentUserId}
           />
         ) : (
-          <div className="flex items-center justify-center rounded-lg border border-dashed border-border p-4">
-            <p className="text-sm text-muted-foreground">
+          <div className="flex items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[hsl(var(--border))] p-4">
+            <p className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]">
               Waiting for opponent to join&hellip;
             </p>
           </div>
         )}
         <p
           className={cn(
-            "mt-1 text-sm leading-snug tabular-nums",
+            "mt-1 text-[14px] leading-[1.5] tabular-nums",
             countdownIsDestructive
-              ? "text-destructive"
-              : "text-muted-foreground",
+              ? "text-[hsl(var(--destructive))]"
+              : "text-[hsl(var(--fg-muted))]",
           )}
         >
           {countdownLabel}
         </p>
         {errorMsg && (
-          <p role="alert" className="text-sm text-muted-foreground">
+          <p
+            role="alert"
+            className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]"
+          >
             Couldn&apos;t refresh lobby state. Retrying&hellip;
           </p>
         )}
       </div>
 
-      {/* Cancel confirmation */}
+      {/* Host control — jewel "Start battle" CTA appears once guest has joined.
+          UI-SPEC § Battle Lobby. Triggers the same pre-battle navigation as
+          the auto-advance effect. */}
+      {isHost && guestJoined && (
+        <div className="mt-8">
+          <Button
+            variant="jewel"
+            className="min-h-12 w-full"
+            onClick={handleStartBattle}
+          >
+            Start battle
+          </Button>
+        </div>
+      )}
+
+      {/* Cancel confirmation — copy lock per UI-SPEC § Copywriting Contract
+          destructive row. */}
       <div className="mt-10">
         <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
           <AlertDialogTrigger asChild>
             <Button
               variant="outline"
-              className="min-h-12 w-full text-destructive border-destructive hover:bg-destructive/10 hover:text-destructive"
+              className="min-h-12 w-full text-[hsl(var(--destructive))] border-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive-soft))] hover:text-[hsl(var(--destructive))]"
             >
               Cancel battle
             </Button>
@@ -327,7 +374,7 @@ function LobbyInner({
               <AlertDialogAction
                 onClick={handleConfirmCancel}
                 disabled={cancelling}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="bg-[hsl(var(--destructive))] text-[hsl(var(--destructive-fg))] hover:bg-[hsl(var(--destructive))]/90"
               >
                 {cancelling ? "Cancelling…" : "Yes, cancel"}
               </AlertDialogAction>

@@ -170,10 +170,12 @@ export function JoinCodeInput({
             onFocus={(e) => e.target.select()}
             aria-invalid={hasError}
             className={cn(
-              "h-14 w-14 rounded-lg border bg-card text-center",
-              "text-[28px] font-semibold leading-[1.15] tabular-nums lg:text-[40px]",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              hasError ? "border-destructive" : "border-border",
+              "min-h-12 min-w-12 h-14 w-14 rounded-[var(--radius-md)] border bg-card text-center",
+              "font-display text-[22px] leading-[1.15] tabular-nums lg:text-[28px]",
+              "focus:outline-none focus-visible:border-[hsl(var(--border-strong))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]",
+              hasError
+                ? "border-[hsl(var(--destructive))]"
+                : "border-[hsl(var(--border))]",
             )}
           />
         ))}

@@ -138,13 +138,13 @@ export default function BattleJoinPage() {
     <div className="px-4 pt-6 pb-24 mx-auto max-w-[480px]">
       <Link
         to="/battle"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground min-h-12"
+        className="inline-flex items-center gap-1 text-[14px] text-[hsl(var(--fg-muted))] min-h-12"
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         Back
       </Link>
 
-      <h1 className="text-xl font-semibold leading-tight mt-2 mb-6">
+      <h1 className="text-[28px] font-semibold leading-[1.2] -tracking-[0.01em] lg:text-[36px] mt-2 mb-6">
         Enter join code
       </h1>
 

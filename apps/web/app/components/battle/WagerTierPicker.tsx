@@ -31,11 +31,11 @@ export function WagerTierPicker({
     <section aria-labelledby="wager-heading">
       <h2
         id="wager-heading"
-        className="text-xl font-semibold leading-tight mb-1"
+        className="text-[22px] font-semibold leading-[1.25] -tracking-[0.005em] mb-1"
       >
         What are you risking?
       </h2>
-      <p className="text-sm text-muted-foreground mb-3">
+      <p className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))] mb-3">
         You&apos;ll each pick a tier. A coin flip decides which one sticks.
       </p>
       <div
@@ -57,18 +57,18 @@ export function WagerTierPicker({
               aria-checked={isSelected}
               onClick={() => onChange(tier)}
               className={cn(
-                "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg border px-3 py-2 transition-colors",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-md)] border px-3 py-2 transition-colors",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]",
                 isSelected
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/40",
+                  ? "border-[hsl(var(--dominant))] bg-[hsl(var(--dominant-soft))] text-[hsl(var(--dominant))]"
+                  : "border-[hsl(var(--border))] bg-[hsl(var(--bg-elevated))] text-[hsl(var(--fg-muted))] hover:bg-[hsl(var(--bg-subtle))]",
               )}
             >
-              <span className="text-xl font-semibold leading-tight tabular-nums">
+              <span className="font-display tabular-nums text-[22px] leading-[1.15]">
                 {tier}%
               </span>
               {preview && (
-                <span className="text-sm font-normal leading-snug tabular-nums">
+                <span className="text-[14px] font-normal leading-[1.5] tabular-nums">
                   {preview}
                 </span>
               )}
@@ -76,7 +76,7 @@ export function WagerTierPicker({
           );
         })}
       </div>
-      <p className="text-sm text-muted-foreground mt-2">
+      <p className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))] mt-2">
         Minimum wager is 10 XP.
       </p>
     </section>

@@ -6,8 +6,8 @@ import {
   useParams,
   useSearchParams,
 } from "react-router";
+import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
-import { Trophy } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { cn } from "~/lib/utils";
@@ -17,6 +17,7 @@ import {
   type BattleLobbyState,
 } from "~/lib/api-client";
 import { useBattleStore } from "~/stores/battle-store";
+import { triggerConfetti } from "~/components/gamification/CelebrationConfetti";
 
 /**
  * Results screen — renders after the DO emits `end` (or after a
@@ -31,10 +32,14 @@ import { useBattleStore } from "~/stores/battle-store";
  *    best-effort endResult from that.
  * 3. Graceful "Battle results expired" fallback if neither source has data.
  *
- * Plan 08 gap: xpTransferred is currently 0 from the DO end event and the
- * lobby fallback doesn't expose wager amounts on the final row yet. We
- * render whatever is available; the `?forfeit=self` query from the room
- * route signals we should force the loser-forfeit copy regardless.
+ * Plan 06-04 visual contract (UI-SPEC § Battle Results):
+ *   - Winner banner: display-lg Rubik Mono One name + score, top margin
+ *     `--space-4xl` (96px) per UI-SPEC.
+ *   - Motion: `battle-win` for winner side (scale 0.9→1.04→1, gradient
+ *     sweep on score, jewel-burst confetti); `battle-loss` for loser side
+ *     (opacity + translateY 8px, ruby border glow once).
+ *   - CTAs: Rematch (jewel) / Back (outline).
+ *   - Reduced-motion gates all motion via useReducedMotion().
  */
 export default function BattleResultsPage() {
   const { id: routeBattleId } = useParams<{ id: string }>();
@@ -47,6 +52,7 @@ function BattleResultsInner({ battleId }: { battleId: string }) {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const forceForfeit = searchParams.get("forfeit") === "self";
+  const reducedMotion = useReducedMotion();
 
   const { data: session } = useSession();
   const myUserId = (session?.user?.id ?? null) as string | null;
@@ -63,8 +69,6 @@ function BattleResultsInner({ battleId }: { battleId: string }) {
     queryKey: ["battle", battleId, "lobby-results"],
     queryFn: () => fetchBattleLobby(battleId),
     staleTime: 60_000,
-    // Only fetch the fallback when the store doesn't already have the
-    // result — saves a network round-trip in the normal flow.
     enabled: !endResult,
   });
 
@@ -99,9 +103,6 @@ function BattleResultsInner({ battleId }: { battleId: string }) {
       };
     }
     if (lobbyFallback && myUserId) {
-      // Without the live end-event we don't know outcome kind for certain;
-      // treat winnerId === myUserId as a win, winnerId === null as draw.
-      // Opponent name uses whichever participant I'm not.
       const isHost = lobbyFallback.hostId === myUserId;
       const opponentName = isHost
         ? lobbyFallback.guestName ?? "Opponent"
@@ -126,8 +127,6 @@ function BattleResultsInner({ battleId }: { battleId: string }) {
     return null;
   }, [endResult, lobbyFallback, myUserId, storeHostId, storeOpponentName]);
 
-  // Force the forfeit-loss copy path when the room route redirected here
-  // with ?forfeit=self (4 retries exhausted).
   const effective = useMemo(() => {
     if (!view) return null;
     if (!forceForfeit) return view;
@@ -144,23 +143,30 @@ function BattleResultsInner({ battleId }: { battleId: string }) {
   useEffect(() => {
     if (effective?.leveledUp && typeof effective.newLevel === "number") {
       toast.success(
-        `Level up! You\u2019re now Level ${effective.newLevel}.`,
+        `Level up! You’re now Level ${effective.newLevel}.`,
       );
     }
   }, [effective?.leveledUp, effective?.newLevel]);
+
+  // battle-win confetti — fires ONCE on mount if the user won, with the
+  // jewel palette (amethyst + ruby + emerald hex tints from Plan 1's
+  // CelebrationConfetti). Reduced-motion gating is delegated to canvas-
+  // confetti via `disableForReducedMotion: true`.
+  useEffect(() => {
+    if (effective?.isWin) {
+      triggerConfetti({ palette: "jewel" });
+    }
+    // Run only when the win flag flips on; effect runs once per result load.
+  }, [effective?.isWin]);
 
   if (!myUserId) {
     return <Navigate to="/auth/sign-in" replace />;
   }
 
-  // Still loading the fallback — hold on the skeleton.
   if (!effective && lobbyPending) {
     return <LoadingPane />;
   }
 
-  // Neither the store nor the lobby fallback yielded data — likely the
-  // user hard-refreshed long after the DO self-destructed AND the battles
-  // row no longer resolves. Give them a graceful exit.
   if (!effective) {
     return (
       <FallbackScreen
@@ -203,9 +209,6 @@ function BattleResultsInner({ battleId }: { battleId: string }) {
     xpBody = `${opponentName} took ${xpTransferred} XP from you.`;
   }
 
-  // Plan 08 gap note: xpTransferred is 0 until the DO's endBattle wires
-  // the atomic XP batch. Rather than show "+0 XP", show a pending
-  // placeholder so UAT readers aren't misled.
   if (xpTransferred === 0 && outcome !== "both-dropped") {
     xpBody =
       outcome === "forfeit"
@@ -219,74 +222,111 @@ function BattleResultsInner({ battleId }: { battleId: string }) {
             : `${opponentName} won. Wagers are being settled.`;
   }
 
+  // UI-SPEC § Motion `battle-win` — winner side: scale [0.9, 1.04, 1] +
+  // gradient sweep on score + jewel-burst confetti (~800ms ease-celebrate).
+  // Reduced: opacity 0→1 200ms only.
+  const winnerAnim = reducedMotion
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        transition: { duration: 0.2 },
+      }
+    : {
+        initial: { opacity: 0, scale: 0.9 },
+        animate: { opacity: 1, scale: [0.9, 1.04, 1] as [number, number, number] },
+        transition: { duration: 0.8, ease: [0.34, 1.56, 0.64, 1] as const },
+      };
+
+  // UI-SPEC § Motion `battle-loss` — loser side: opacity + translateY 8px +
+  // ruby border glow once (~320ms ease-soft). Reduced: opacity-only 200ms.
+  const loserAnim = reducedMotion
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        transition: { duration: 0.2 },
+      }
+    : {
+        initial: { opacity: 0, y: 8 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.32, ease: [0.4, 0, 0.2, 1] as const },
+      };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
-      <Card className="flex w-full max-w-md flex-col items-center gap-4 p-8">
-        {/* Outcome badge */}
-        <div
-          className={cn(
-            "flex h-16 w-16 items-center justify-center rounded-full",
-            isWin ? "bg-primary" : "bg-muted",
-          )}
-        >
-          <Trophy
+    <div className="flex min-h-screen flex-col items-center bg-background px-4 pb-12">
+      <motion.div
+        {...(isWin ? winnerAnim : loserAnim)}
+        className={cn(
+          "w-full max-w-md mt-24 rounded-[var(--radius-xl)]",
+          // Loser side gets a one-shot ruby border glow per battle-loss motion.
+          !isWin &&
+            !isDraw &&
+            !reducedMotion &&
+            "shadow-[var(--shadow-glow-ruby)]",
+        )}
+      >
+        <Card className="flex w-full flex-col items-center gap-6 p-8">
+          {/* Winner banner — display-lg Rubik Mono One */}
+          <h1
             className={cn(
-              "h-8 w-8",
-              isWin ? "text-primary-foreground" : "text-muted-foreground",
-            )}
-            aria-hidden="true"
-          />
-        </div>
-
-        {/* Heading — Display 28/40 weight 600 */}
-        <h1 className="text-center text-[28px] font-semibold leading-tight lg:text-[40px]">
-          {heading}
-        </h1>
-
-        {/* XP transfer body */}
-        <p className="text-center text-base text-muted-foreground">
-          {xpBody}
-        </p>
-
-        {/* Score comparison row — Display sizes, tabular-nums */}
-        <div className="flex items-center gap-4">
-          <span
-            className={cn(
-              "text-[28px] font-semibold tabular-nums leading-none lg:text-[40px]",
-              isWin ? "text-primary" : "text-foreground",
+              "text-center font-display leading-[1.05] -tracking-[0.01em]",
+              "text-[36px] lg:text-[48px]",
             )}
           >
-            {myScore}
-          </span>
-          <span className="text-sm text-muted-foreground">vs</span>
-          <span
-            className={cn(
-              "text-[28px] font-semibold tabular-nums leading-none lg:text-[40px]",
-              !isWin && !isDraw ? "text-primary" : "text-foreground",
-            )}
-          >
-            {opponentScore}
-          </span>
-        </div>
+            {heading}
+          </h1>
 
-        {/* CTAs */}
-        <Button
-          className="w-full"
-          size="lg"
-          autoFocus
-          onClick={() => navigate("/battle?tab=create")}
-        >
-          Play again
-        </Button>
-        <Button
-          variant="ghost"
-          className="w-full"
-          size="lg"
-          onClick={() => navigate("/battle")}
-        >
-          Back to battle
-        </Button>
-      </Card>
+          {/* Score row — winner score gets a gradient sweep (battle-win) */}
+          <div className="flex items-center gap-6">
+            <span
+              className={cn(
+                "font-display tabular-nums text-[36px] leading-[1.05] lg:text-[48px]",
+                isWin
+                  ? "bg-gradient-to-r from-[hsl(var(--celebration-from))] to-[hsl(var(--celebration-to))] bg-clip-text text-transparent"
+                  : "text-foreground",
+              )}
+            >
+              {myScore}
+            </span>
+            <span className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]">
+              vs
+            </span>
+            <span
+              className={cn(
+                "font-display tabular-nums text-[36px] leading-[1.05] lg:text-[48px]",
+                !isWin && !isDraw
+                  ? "bg-gradient-to-r from-[hsl(var(--celebration-from))] to-[hsl(var(--celebration-to))] bg-clip-text text-transparent"
+                  : "text-foreground",
+              )}
+            >
+              {opponentScore}
+            </span>
+          </div>
+
+          {/* XP body */}
+          <p className="text-center text-[16px] leading-[1.5] text-[hsl(var(--fg-muted))]">
+            {xpBody}
+          </p>
+
+          {/* CTAs — Rematch jewel + Back outline (UI-SPEC § Battle Results) */}
+          <div className="flex flex-col gap-3 w-full pt-2">
+            <Button
+              variant="jewel"
+              className="w-full"
+              autoFocus
+              onClick={() => navigate("/battle?tab=create")}
+            >
+              Rematch
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => navigate("/battle")}
+            >
+              Back
+            </Button>
+          </div>
+        </Card>
+      </motion.div>
     </div>
   );
 }
@@ -297,7 +337,7 @@ function LoadingPane() {
       <p
         role="status"
         aria-live="polite"
-        className="text-base text-muted-foreground"
+        className="text-[16px] leading-[1.5] text-[hsl(var(--fg-muted))]"
       >
         Loading results&hellip;
       </p>
@@ -317,9 +357,13 @@ function FallbackScreen({
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
       <Card className="w-full max-w-md p-8 text-center">
-        <h1 className="mb-2 text-xl font-semibold leading-tight">{heading}</h1>
-        <p className="mb-6 text-base text-muted-foreground">{body}</p>
-        <Button onClick={onBack} className="w-full" size="lg">
+        <h1 className="mb-2 text-[22px] font-semibold leading-[1.25] -tracking-[0.005em]">
+          {heading}
+        </h1>
+        <p className="mb-6 text-[16px] leading-[1.5] text-[hsl(var(--fg-muted))]">
+          {body}
+        </p>
+        <Button variant="jewel" onClick={onBack} className="w-full">
           Back to battle
         </Button>
       </Card>

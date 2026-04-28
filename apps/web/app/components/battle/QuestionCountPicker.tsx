@@ -29,7 +29,7 @@ export function QuestionCountPicker({
     <section aria-labelledby="question-count-heading">
       <h2
         id="question-count-heading"
-        className="text-xl font-semibold leading-tight mb-3"
+        className="text-[22px] font-semibold leading-[1.25] -tracking-[0.005em] mb-3"
       >
         How many questions?
       </h2>
@@ -48,22 +48,22 @@ export function QuestionCountPicker({
               aria-checked={isSelected}
               onClick={() => onChange(count)}
               className={cn(
-                "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg border px-3 py-2 transition-colors",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-md)] border px-3 py-2 transition-colors",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]",
                 isSelected
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/40",
+                  ? "border-[hsl(var(--dominant))] bg-[hsl(var(--dominant-soft))] text-[hsl(var(--dominant))]"
+                  : "border-[hsl(var(--border))] bg-[hsl(var(--bg-elevated))] text-[hsl(var(--fg-muted))] hover:bg-[hsl(var(--bg-subtle))]",
               )}
             >
-              <span className="text-xl font-semibold leading-tight">
+              <span className="font-display tabular-nums text-[22px] leading-[1.15]">
                 {count}
               </span>
-              <span className="text-sm font-normal leading-snug">{label}</span>
+              <span className="text-[14px] font-normal leading-[1.5]">{label}</span>
             </button>
           );
         })}
       </div>
-      <p className="text-sm text-muted-foreground mt-2">
+      <p className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))] mt-2">
         Each question has 15 seconds. A standard battle lasts about 3 minutes.
       </p>
     </section>

@@ -43,15 +43,17 @@ export function ParticipantCard({
 	return (
 		<div
 			className={cn(
-				"flex items-center gap-3 rounded-lg border bg-card p-4",
-				isSelf ? "border-primary/60" : "border-border",
+				"flex items-center gap-3 rounded-[var(--radius-lg)] border bg-[hsl(var(--bg-elevated))] p-4",
+				isSelf
+					? "border-[hsl(var(--dominant))]/60"
+					: "border-[hsl(var(--border))]",
 			)}
 			data-role={role}
 			data-self={isSelf ? "true" : "false"}
 		>
 			{/* Avatar */}
 			<div
-				className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-semibold text-muted-foreground"
+				className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[hsl(var(--bg-subtle))] text-[14px] font-medium text-[hsl(var(--fg-muted))]"
 				aria-hidden="true"
 			>
 				{image ? (
@@ -70,10 +72,10 @@ export function ParticipantCard({
 			{/* Name + metadata */}
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
 				<div className="flex items-center gap-2">
-					<p className="truncate text-base font-semibold leading-tight">
+					<p className="truncate text-[16px] font-semibold leading-[1.5]">
 						{name}
 						{isSelf && (
-							<span className="ml-1 text-xs font-normal text-muted-foreground">
+							<span className="ml-1 text-[12px] font-normal text-[hsl(var(--fg-muted))]">
 								(you)
 							</span>
 						)}
@@ -81,7 +83,7 @@ export function ParticipantCard({
 				</div>
 				<div className="flex items-center gap-2">
 					<LevelBadge level={level} />
-					<span className="text-sm text-muted-foreground tabular-nums">
+					<span className="text-[14px] leading-[1.5] tabular-nums text-[hsl(var(--fg-muted))]">
 						{xp.toLocaleString()} XP
 					</span>
 				</div>
@@ -90,10 +92,10 @@ export function ParticipantCard({
 			{/* Role chip — host vs guest */}
 			<span
 				className={cn(
-					"shrink-0 rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide",
+					"shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium uppercase tracking-wide",
 					role === "host"
-						? "bg-primary/10 text-primary"
-						: "bg-muted text-muted-foreground",
+						? "bg-[hsl(var(--dominant-soft))] text-[hsl(var(--dominant))]"
+						: "bg-[hsl(var(--bg-subtle))] text-[hsl(var(--fg-muted))]",
 				)}
 			>
 				{role}
