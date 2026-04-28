@@ -12,6 +12,7 @@ export default [
     route("auth/sign-in", "routes/_auth.sign-in.tsx"),
     route("auth/forgot-password", "routes/_auth.forgot-password.tsx"),
     route("auth/verify-email", "routes/_auth.verify-email.tsx"),
+    route("auth/oauth-error", "routes/_auth.oauth-error.tsx"),
   ]),
 
   // App routes (authenticated)
