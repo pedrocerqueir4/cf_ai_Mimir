@@ -697,9 +697,15 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Message list */}
+      {/* Message list — extra bottom padding clears the fixed composer
+          so the last message is never hidden behind it. Mobile clearance:
+          composer (~h-12 input + py-3 + border + safe-area) ≈ 96px; on top
+          of that, the composer sits 64px above the bottom (BottomNav h-16)
+          but the composer overlays content from its top edge, so we need
+          ~160px clearance from the message-list bottom = pb-40. Desktop:
+          composer ≈ 96px, no BottomNav, so pb-28 covers it. */}
       <ScrollArea className="flex-1">
-        <div className="px-4 py-4 pb-24 lg:pb-6">
+        <div className="px-4 py-4 pb-40 lg:pb-28">
           {/* Top sentinel — fires loadOlder when visible. Rendered only when
               there's more history to avoid an observer on an unused node. */}
           {hasMoreHistory && (
@@ -758,10 +764,16 @@ export default function ChatPage() {
         </div>
       </ScrollArea>
 
-      {/* Sticky frosted composer — UI-SPEC § Chat. Fixed above BottomNav on
-          mobile (bottom-16); static (sticky bottom-0) on lg+. Frosted +
-          backdrop-blur fallback for unsupported browsers. */}
-      <div className="fixed bottom-16 left-0 right-0 z-40 border-t border-[hsl(var(--border))] bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card px-4 py-3 lg:static lg:bottom-0 lg:px-4 lg:py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+      {/* Frosted composer pinned to viewport bottom — UI-SPEC § Chat.
+          Always `fixed` so it never tracks the message-list height
+          (WhatsApp / iMessage / Discord pattern):
+            • Mobile (< lg): bottom-16 sits above the BottomNav (h-16 = 64px).
+              `left-0 right-0` spans full viewport width; safe-area padding
+              handles iOS home-bar inset.
+            • Desktop (lg+): bottom-0 flush to viewport bottom; left-[280px]
+              clears the SidebarNav (lg:w-[280px]).
+          Frosted + backdrop-blur fallback for unsupported browsers. */}
+      <div className="fixed bottom-16 left-0 right-0 z-40 border-t border-[hsl(var(--border))] bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:bottom-0 lg:left-[280px] lg:px-4 lg:py-3">
         <div className="flex items-end gap-3">
           <label htmlFor="chat-input" className="sr-only">
             Message
