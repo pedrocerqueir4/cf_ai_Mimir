@@ -18,9 +18,10 @@ import { getLocalTimezone } from "~/lib/utils";
  * Layout:
  * - Top frosted bar (sticky below AppShell): back + lesson title + progress dots
  * - Article body: max-w 680px, body 16/1.5, generous vertical rhythm
- * - Bottom frosted action bar (sticky): "Mark complete" + Q&A icon button
+ * - Bottom frosted action bar (sticky): Q&A icon button only
  *   (`aria-label="Ask Mimir about this lesson"`) opening InLessonQASheet
- *   (`Sheet variant="frosted"`).
+ *   (`Sheet variant="frosted"`). "Mark complete" lives inline at end of page,
+ *   not in the action bar (avoids duplicate affordance).
  *
  * Quiz flow preserved verbatim from prior implementation:
  * - "Knowledge Check" divider + per-question feedback (3-phase state machine)
@@ -266,16 +267,9 @@ export default function LessonPage() {
         )}
       </article>
 
-      {/* Bottom frosted action bar — primary CTA + Q&A icon button. */}
-      <div className="fixed bottom-16 lg:bottom-0 left-0 right-0 z-30 flex items-center gap-3 border-t border-[hsl(var(--border))] bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-        <Button
-          variant="default"
-          className="flex-1"
-          onClick={handleCompleteLesson}
-          disabled={isCompleting || (totalQuestions > 0 && !quizFinished)}
-        >
-          {isCompleting ? "Completing..." : "Mark complete"}
-        </Button>
+      {/* Bottom frosted action bar — Q&A icon button only.
+          (Mark complete lives inline at end of page after the quiz / lesson body.) */}
+      <div className="fixed bottom-16 lg:bottom-0 left-0 right-0 z-30 flex min-h-12 items-center justify-end border-t border-[hsl(var(--border))] bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
         <Button
           id="ask-ai-btn"
           variant="ghost"
