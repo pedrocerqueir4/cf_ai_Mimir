@@ -226,3 +226,21 @@
     background-image: none;
   }
 }
+
+/*
+ * React Flow custom-node touch fix (xyflow/xyflow#5087, OPEN as of v12.10.x).
+ * React Flow inline-styles `touch-action: none` on every `.react-flow__node`
+ * wrapper, which suppresses the browser's tap → click dispatch. Result:
+ * <button> children inside custom nodes (e.g. LessonNode) never receive
+ * onClick on touch devices.
+ *
+ * Override via external CSS with !important — inline styles can only be
+ * beaten by external !important. `manipulation` allows tap-to-click + pan
+ * + pinch-zoom while suppressing the legacy 300ms double-tap delay. Pan
+ * and zoom of the React Flow CANVAS itself are still controlled by the
+ * `.react-flow` root's own touch-action (untouched), so this only changes
+ * how the browser treats taps on individual node cards.
+ */
+.react-flow__node {
+  touch-action: manipulation !important;
+}
