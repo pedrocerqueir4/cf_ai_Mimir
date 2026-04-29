@@ -75,20 +75,102 @@
   --color-dominant: var(--color-kumo-brand);
 }
 
+/*
+ * Direct-name CSS vars expose HSL triplets (NOT full color values). 291
+ * legacy consumers wrap these in `hsl(var(--X))` — that pattern only works
+ * if the var holds a triplet. Triplets here approximate Kumo's actual
+ * OKLCH tokens; close enough for visual parity until consumers migrate.
+ *
+ * Light mode triplets ≈ Kumo light tokens.
+ */
 :root {
-  --background: var(--color-kumo-canvas);
-  --foreground: var(--color-kumo-default);
-  --card: var(--color-kumo-base);
-  --primary: var(--color-kumo-brand);
-  --secondary: var(--color-kumo-fill);
-  --muted: var(--color-kumo-tint);
-  --accent: var(--color-kumo-fill);
-  --destructive: var(--color-kumo-danger);
-  --success: var(--color-kumo-success);
-  --border: var(--color-kumo-line);
-  --input: var(--color-kumo-line);
-  --ring: var(--color-kumo-brand);
-  --dominant: var(--color-kumo-brand);
+  --background: 0 0% 99%;            /* ≈ kumo-canvas */
+  --foreground: 280 5% 12%;          /* ≈ kumo-default (dark text) */
+  --card: 0 0% 100%;                 /* ≈ kumo-base (white) */
+  --card-foreground: 280 5% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 280 5% 12%;
+  --primary: 243 65% 50%;            /* ≈ kumo-brand (blue-purple) */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 92%;             /* ≈ kumo-fill */
+  --secondary-foreground: 280 5% 12%;
+  --muted: 0 0% 97%;                 /* ≈ kumo-tint */
+  --muted-foreground: 0 0% 45%;      /* ≈ kumo-subtle */
+  --accent: 0 0% 92%;                /* ≈ kumo-fill */
+  --accent-foreground: 280 5% 12%;
+  --destructive: 0 73% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --destructive-soft: 0 75% 95%;
+  --destructive-fg: 0 0% 100%;
+  --success: 150 60% 38%;
+  --success-soft: 150 70% 95%;
+  --success-fg: 0 0% 100%;
+  --border: 0 0% 87%;                /* ≈ kumo-line */
+  --border-strong: 0 0% 78%;
+  --input: 0 0% 87%;
+  --ring: 243 65% 50%;               /* ≈ kumo-brand */
+  --dominant: 243 65% 50%;
+  --dominant-hover: 243 65% 45%;
+  --dominant-soft: 243 80% 95%;
+  --dominant-fg: 0 0% 100%;
+  --bg-base: 0 0% 99%;
+  --bg-elevated: 0 0% 100%;
+  --bg-subtle: 0 0% 97%;
+  --bg-frosted: rgba(255, 255, 255, 0.62);
+  --bg-overlay: rgba(0, 0, 0, 0.32);
+  --fg: 280 5% 12%;
+  --fg-muted: 0 0% 45%;
+  --fg-subtle: 0 0% 60%;
+  --celebration-from: 243 65% 50%;
+  --celebration-to: 280 60% 60%;
+}
+
+/*
+ * Dark mode triplets ≈ Kumo dark tokens.
+ * Dual-selector — both `.dark` (legacy class) and `[data-mode="dark"]` (Kumo)
+ * are written to <html> by ~/lib/theme.ts.
+ */
+.dark,
+[data-mode="dark"] {
+  --background: 0 0% 12%;            /* ≈ kumo-canvas dark */
+  --foreground: 0 0% 97%;            /* ≈ kumo-default dark */
+  --card: 0 0% 17%;                  /* ≈ kumo-base dark */
+  --card-foreground: 0 0% 97%;
+  --popover: 0 0% 17%;
+  --popover-foreground: 0 0% 97%;
+  --primary: 243 70% 70%;            /* ≈ kumo-brand dark */
+  --primary-foreground: 0 0% 12%;
+  --secondary: 0 0% 25%;             /* ≈ kumo-fill dark */
+  --secondary-foreground: 0 0% 97%;
+  --muted: 0 0% 17%;                 /* ≈ kumo-tint dark */
+  --muted-foreground: 0 0% 70%;      /* ≈ kumo-subtle dark */
+  --accent: 0 0% 25%;
+  --accent-foreground: 0 0% 97%;
+  --destructive: 0 80% 65%;
+  --destructive-foreground: 0 0% 12%;
+  --destructive-soft: 0 50% 18%;
+  --destructive-fg: 0 0% 12%;
+  --success: 150 65% 55%;
+  --success-soft: 150 50% 18%;
+  --success-fg: 0 0% 12%;
+  --border: 0 0% 22%;                /* ≈ kumo-line dark */
+  --border-strong: 0 0% 32%;
+  --input: 0 0% 22%;
+  --ring: 243 70% 70%;
+  --dominant: 243 70% 70%;
+  --dominant-hover: 243 70% 65%;
+  --dominant-soft: 243 50% 25%;
+  --dominant-fg: 0 0% 12%;
+  --bg-base: 0 0% 12%;
+  --bg-elevated: 0 0% 17%;
+  --bg-subtle: 0 0% 17%;
+  --bg-frosted: rgba(0, 0, 0, 0.62);
+  --bg-overlay: rgba(0, 0, 0, 0.64);
+  --fg: 0 0% 97%;
+  --fg-muted: 0 0% 70%;
+  --fg-subtle: 0 0% 55%;
+  --celebration-from: 243 70% 70%;
+  --celebration-to: 280 65% 75%;
 }
 
 /*
