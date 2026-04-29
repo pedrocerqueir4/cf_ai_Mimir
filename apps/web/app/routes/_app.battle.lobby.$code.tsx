@@ -352,14 +352,17 @@ function LobbyInner({
           destructive row. */}
       <div className="mt-10">
         <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="outline"
-              className="min-h-12 w-full text-[hsl(var(--destructive))] border-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive-soft))] hover:text-[hsl(var(--destructive))]"
-            >
-              Cancel battle
-            </Button>
-          </AlertDialogTrigger>
+          <AlertDialogTrigger
+            render={(triggerProps) => (
+              <Button
+                {...triggerProps}
+                variant="outline"
+                className="min-h-12 w-full text-[hsl(var(--destructive))] border-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive-soft))] hover:text-[hsl(var(--destructive))]"
+              >
+                Cancel battle
+              </Button>
+            )}
+          />
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Cancel this battle?</AlertDialogTitle>

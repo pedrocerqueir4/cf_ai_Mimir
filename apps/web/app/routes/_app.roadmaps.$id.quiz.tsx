@@ -3,10 +3,11 @@ import { useParams, Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { Skeleton } from "~/components/ui/skeleton";
-import { Button } from "~/components/ui/button";
+import { Button, buttonVariants } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { QuizQuestion } from "~/components/lesson/QuizQuestion";
 import { fetchPracticeQuiz, fetchRoadmapDetail } from "~/lib/api-client";
+import { cn } from "~/lib/utils";
 
 /**
  * Practice Quiz page — Screen 5 per UI-SPEC.
@@ -106,9 +107,15 @@ export default function PracticeQuizPage() {
           <p className="text-base text-muted-foreground max-w-xs">
             Complete at least one lesson before taking a practice quiz.
           </p>
-          <Button variant="default" asChild>
-            <Link to={`/roadmaps/${roadmapId}`}>Go to roadmap</Link>
-          </Button>
+          <Link
+            to={`/roadmaps/${roadmapId}`}
+            className={cn(
+              buttonVariants({ variant: "default" }),
+              "inline-flex items-center justify-center",
+            )}
+          >
+            Go to roadmap
+          </Link>
         </div>
       </div>
     );
@@ -176,9 +183,15 @@ export default function PracticeQuizPage() {
             <Button variant="default" className="w-full" onClick={handleRetry}>
               Try again
             </Button>
-            <Button variant="outline" className="w-full" asChild>
-              <Link to={`/roadmaps/${roadmapId}`}>Back to roadmap</Link>
-            </Button>
+            <Link
+              to={`/roadmaps/${roadmapId}`}
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "w-full inline-flex items-center justify-center",
+              )}
+            >
+              Back to roadmap
+            </Link>
           </div>
         </Card>
       </div>

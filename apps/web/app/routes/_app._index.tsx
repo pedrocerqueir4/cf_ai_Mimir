@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { Skeleton } from "~/components/ui/skeleton";
-import { Button } from "~/components/ui/button";
+import { buttonVariants } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
+import { cn } from "~/lib/utils";
 import { StatCard } from "~/components/gamification/StatCard";
 import { LevelBadge } from "~/components/gamification/LevelBadge";
 import { XPCounterDisplay } from "~/components/gamification/XPCounterDisplay";
@@ -177,11 +178,15 @@ export default function HomePage() {
               <p className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]">
                 Resume your most recent roadmap.
               </p>
-              <Button variant="default" className="w-full lg:w-auto" asChild>
-                <Link to={`/roadmaps/${stats.lastActiveRoadmapId}`}>
-                  Continue
-                </Link>
-              </Button>
+              <Link
+                to={`/roadmaps/${stats.lastActiveRoadmapId}`}
+                className={cn(
+                  buttonVariants({ variant: "default" }),
+                  "w-full lg:w-auto inline-flex items-center justify-center",
+                )}
+              >
+                Continue
+              </Link>
             </CardContent>
           </Card>
         ) : (
@@ -190,9 +195,15 @@ export default function HomePage() {
               <p className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]">
                 No active roadmap yet.
               </p>
-              <Button variant="default" className="w-full lg:w-auto" asChild>
-                <Link to="/chat">Start Your First Roadmap</Link>
-              </Button>
+              <Link
+                to="/chat"
+                className={cn(
+                  buttonVariants({ variant: "default" }),
+                  "w-full lg:w-auto inline-flex items-center justify-center",
+                )}
+              >
+                Start Your First Roadmap
+              </Link>
             </CardContent>
           </Card>
         )}

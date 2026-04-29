@@ -3,13 +3,14 @@ import { useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { Sword, ScanLine } from "lucide-react";
-import { Button } from "~/components/ui/button";
+import { Button, buttonVariants } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList } from "~/components/ui/tabs";
 import { LeaderboardRow } from "~/components/battle/LeaderboardRow";
 import { fetchLeaderboard } from "~/lib/api-client";
+import { cn } from "~/lib/utils";
 
 type TopTab = "create" | "join" | "leaderboard";
 type LeaderboardWindow = "week" | "all";
@@ -128,9 +129,15 @@ function CreateTabPanel() {
             </p>
           </div>
         </div>
-        <Button variant="jewel" asChild className="w-full">
-          <Link to="/battle/new">Create battle</Link>
-        </Button>
+        <Link
+          to="/battle/new"
+          className={cn(
+            buttonVariants({ variant: "jewel" }),
+            "w-full inline-flex items-center justify-center",
+          )}
+        >
+          Create battle
+        </Link>
       </CardContent>
     </Card>
   );
@@ -155,9 +162,15 @@ function JoinTabPanel() {
             </p>
           </div>
         </div>
-        <Button variant="outline" asChild className="w-full">
-          <Link to="/battle/join">Join battle</Link>
-        </Button>
+        <Link
+          to="/battle/join"
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "w-full inline-flex items-center justify-center",
+          )}
+        >
+          Join battle
+        </Link>
       </CardContent>
     </Card>
   );

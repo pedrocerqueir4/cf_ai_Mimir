@@ -134,84 +134,87 @@ function NodeCard({ node, state, roadmapId }: NodeCardProps) {
   return (
     <TooltipProvider>
       <Tooltip open={isLocked ? tooltipOpen : undefined}>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            role="button"
-            aria-label={`${node.title} — ${state.replace("_", " ")}`}
-            aria-disabled={isLocked ? "true" : undefined}
-            tabIndex={isLocked ? -1 : 0}
-            onClick={handleClick}
-            onKeyDown={handleKeyDown}
-            className={cn(
-              "block w-full text-left rounded-[var(--radius-lg)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-              isLocked && "cursor-not-allowed",
-            )}
-          >
-            <Card
+        <TooltipTrigger
+          render={(triggerProps) => (
+            <button
+              {...triggerProps}
+              type="button"
+              role="button"
+              aria-label={`${node.title} — ${state.replace("_", " ")}`}
+              aria-disabled={isLocked ? "true" : undefined}
+              tabIndex={isLocked ? -1 : 0}
+              onClick={handleClick}
+              onKeyDown={handleKeyDown}
               className={cn(
-                "mx-4 min-h-12 transition-shadow duration-[var(--dur-base)] motion-reduce:transition-none",
-                cardBorderClass,
-                !isLocked && "lg:hover:shadow-[var(--shadow-md)]",
+                "block w-full text-left rounded-[var(--radius-lg)]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                isLocked && "cursor-not-allowed",
               )}
             >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between gap-3">
-                  {/* Lock icon for locked nodes */}
-                  {isLocked && (
-                    <Lock
-                      className="h-4 w-4 text-[hsl(var(--fg-subtle))] shrink-0"
-                      aria-hidden="true"
-                    />
-                  )}
+              <Card
+                className={cn(
+                  "mx-4 min-h-12 transition-shadow duration-[var(--dur-base)] motion-reduce:transition-none",
+                  cardBorderClass,
+                  !isLocked && "lg:hover:shadow-[var(--shadow-md)]",
+                )}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    {/* Lock icon for locked nodes */}
+                    {isLocked && (
+                      <Lock
+                        className="h-4 w-4 text-[hsl(var(--fg-subtle))] shrink-0"
+                        aria-hidden="true"
+                      />
+                    )}
 
-                  {/* Node title + CTA caption */}
-                  <div className="flex-1 min-w-0 flex flex-col">
-                    <span
-                      className={cn(
-                        "text-[18px] font-medium leading-[1.3] truncate",
-                        isLocked
-                          ? "text-[hsl(var(--fg-subtle))]"
-                          : "text-foreground",
-                      )}
-                    >
-                      {node.title}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-[12px] leading-[1.4] tracking-[0.005em] mt-0.5",
-                        isCompleted
-                          ? "text-[hsl(var(--success))]"
-                          : isInProgress
-                            ? "text-[hsl(var(--dominant))]"
-                            : isLocked
-                              ? "text-[hsl(var(--fg-subtle))]"
-                              : "text-[hsl(var(--fg-muted))]",
-                      )}
-                    >
-                      {isLocked ? "Locked" : ctaCopy}
-                    </span>
+                    {/* Node title + CTA caption */}
+                    <div className="flex-1 min-w-0 flex flex-col">
+                      <span
+                        className={cn(
+                          "text-[18px] font-medium leading-[1.3] truncate",
+                          isLocked
+                            ? "text-[hsl(var(--fg-subtle))]"
+                            : "text-foreground",
+                        )}
+                      >
+                        {node.title}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-[12px] leading-[1.4] tracking-[0.005em] mt-0.5",
+                          isCompleted
+                            ? "text-[hsl(var(--success))]"
+                            : isInProgress
+                              ? "text-[hsl(var(--dominant))]"
+                              : isLocked
+                                ? "text-[hsl(var(--fg-subtle))]"
+                                : "text-[hsl(var(--fg-muted))]",
+                        )}
+                      >
+                        {isLocked ? "Locked" : ctaCopy}
+                      </span>
+                    </div>
+
+                    {/* Status icon — emerald checkmark for done, amethyst dot for in-progress */}
+                    {isCompleted && (
+                      <CheckCircle
+                        className="h-5 w-5 text-[hsl(var(--success))] shrink-0"
+                        aria-hidden="true"
+                      />
+                    )}
+                    {isInProgress && (
+                      <span
+                        className="h-2 w-2 rounded-full bg-[hsl(var(--dominant))] shrink-0"
+                        aria-hidden="true"
+                      />
+                    )}
                   </div>
-
-                  {/* Status icon — emerald checkmark for done, amethyst dot for in-progress */}
-                  {isCompleted && (
-                    <CheckCircle
-                      className="h-5 w-5 text-[hsl(var(--success))] shrink-0"
-                      aria-hidden="true"
-                    />
-                  )}
-                  {isInProgress && (
-                    <span
-                      className="h-2 w-2 rounded-full bg-[hsl(var(--dominant))] shrink-0"
-                      aria-hidden="true"
-                    />
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </button>
-        </TooltipTrigger>
+                </CardContent>
+              </Card>
+            </button>
+          )}
+        />
         {isLocked && (
           <TooltipContent side="top">
             Complete previous lessons to unlock

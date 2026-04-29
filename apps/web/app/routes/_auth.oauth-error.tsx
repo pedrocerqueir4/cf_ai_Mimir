@@ -8,7 +8,8 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { Alert, AlertDescription } from "~/components/ui/alert";
-import { Button } from "~/components/ui/button";
+import { buttonVariants } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
 
 /**
  * OAuth error route — UI-SPEC § OAuth error screen.
@@ -90,12 +91,24 @@ export default function OAuthErrorPage() {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{COPY[variant]}</AlertDescription>
         </Alert>
-        <Button asChild className="min-h-12 w-full">
-          <Link to="/auth/sign-in">Try again</Link>
-        </Button>
-        <Button asChild variant="ghost" className="min-h-12 w-full">
-          <Link to="/auth/sign-in">Back to sign in</Link>
-        </Button>
+        <Link
+          to="/auth/sign-in"
+          className={cn(
+            buttonVariants(),
+            "w-full inline-flex items-center justify-center",
+          )}
+        >
+          Try again
+        </Link>
+        <Link
+          to="/auth/sign-in"
+          className={cn(
+            buttonVariants({ variant: "ghost" }),
+            "w-full inline-flex items-center justify-center",
+          )}
+        >
+          Back to sign in
+        </Link>
       </CardContent>
     </Card>
   );

@@ -5,7 +5,8 @@ import { toast } from "~/lib/toast";
 
 import { authClient } from "~/lib/auth-client";
 
-import { Button } from "~/components/ui/button";
+import { Button, buttonVariants } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
 import {
   Card,
   CardContent,
@@ -85,10 +86,17 @@ export default function VerifyEmailPage() {
             )}
           </Button>
 
-          {/* Secondary link — Button ghost full-width per UI-SPEC § Auth Screens. */}
-          <Button asChild variant="ghost" className="min-h-12 w-full">
-            <Link to="/auth/sign-in">Sign in</Link>
-          </Button>
+          {/* Secondary link — buttonVariants() + <Link> per Phase 07 Pattern 1
+              (07-RESEARCH Q1 option b — preserves SPA navigation, avoids LinkProvider gap). */}
+          <Link
+            to="/auth/sign-in"
+            className={cn(
+              buttonVariants({ variant: "ghost" }),
+              "w-full inline-flex items-center justify-center",
+            )}
+          >
+            Sign in
+          </Link>
         </CardContent>
       </Card>
     </div>

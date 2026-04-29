@@ -197,14 +197,17 @@ export default function ProfilePage() {
 
       {/* Sign-out — AlertDialog confirmation per UI-SPEC § Copywriting Contract destructive row */}
       <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button
-            variant="outline"
-            className="w-full text-[hsl(var(--destructive))] border-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive-soft))] hover:text-[hsl(var(--destructive))]"
-          >
-            Sign out
-          </Button>
-        </AlertDialogTrigger>
+        <AlertDialogTrigger
+          render={(triggerProps) => (
+            <Button
+              {...triggerProps}
+              variant="outline"
+              className="w-full text-[hsl(var(--destructive))] border-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive-soft))] hover:text-[hsl(var(--destructive))]"
+            >
+              Sign out
+            </Button>
+          )}
+        />
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Sign out?</AlertDialogTitle>

@@ -8,8 +8,9 @@ import { signInSchema, type SignInInput } from "~/lib/auth-schemas";
 import { signIn } from "~/lib/auth-client";
 import { getRestorePath } from "~/lib/session";
 
-import { Button } from "~/components/ui/button";
+import { Button, buttonVariants } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { cn } from "~/lib/utils";
 import {
   Card,
   CardContent,
@@ -253,14 +254,17 @@ export default function SignInPage() {
             </form>
           </Form>
 
-          {/* Secondary link — Button ghost full-width per UI-SPEC § Auth Screens. */}
-          <Button
-            asChild
-            variant="ghost"
-            className="min-h-12 w-full"
+          {/* Secondary link — buttonVariants() + <Link> per Phase 07 Pattern 1
+              (07-RESEARCH Q1 option b — preserves SPA navigation, avoids LinkProvider gap). */}
+          <Link
+            to="/auth/sign-up"
+            className={cn(
+              buttonVariants({ variant: "ghost" }),
+              "w-full inline-flex items-center justify-center",
+            )}
           >
-            <Link to="/auth/sign-up">Create account</Link>
-          </Button>
+            Create account
+          </Link>
         </CardContent>
       </Card>
     </div>

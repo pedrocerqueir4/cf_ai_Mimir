@@ -13,14 +13,18 @@ export const Tooltip = KumoTooltip.Root;
 export const TooltipProvider = KumoTooltip.Provider;
 export const TooltipTrigger = KumoTooltip.Trigger;
 
+type TooltipSide = "top" | "right" | "bottom" | "left";
+
 const TooltipContent = React.forwardRef<
   React.ElementRef<typeof KumoTooltip.Popup>,
   React.ComponentPropsWithoutRef<typeof KumoTooltip.Popup> & {
     sideOffset?: number;
+    /** Side of the trigger to anchor the tooltip against. Forwarded to Base UI Positioner. */
+    side?: TooltipSide;
   }
->(({ className, sideOffset = 4, children, ...props }, ref) => (
+>(({ className, sideOffset = 4, side = "top", children, ...props }, ref) => (
   <KumoTooltip.Portal>
-    <KumoTooltip.Positioner sideOffset={sideOffset}>
+    <KumoTooltip.Positioner sideOffset={sideOffset} side={side}>
       <KumoTooltip.Popup
         ref={ref}
         className={cn(

@@ -4,9 +4,10 @@ import { Link } from "react-router";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { fetchRoadmaps, type RoadmapListItem as RoadmapListItemType } from "~/lib/api-client";
 import { RoadmapListItem } from "~/components/roadmap/RoadmapListItem";
-import { Button } from "~/components/ui/button";
+import { buttonVariants } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Tabs, TabsList } from "~/components/ui/tabs";
+import { cn } from "~/lib/utils";
 
 // UI-SPEC § Motion `list-reveal-stagger`:
 //   320ms total, 40ms stagger per item, opacity 0→1 + translateY 12px→0.
@@ -71,9 +72,15 @@ export default function RoadmapsPage() {
         <h1 className="text-[28px] font-semibold leading-[1.2] -tracking-[0.01em] lg:text-[36px]">
           Roadmaps
         </h1>
-        <Button asChild>
-          <Link to="/chat">Generate roadmap</Link>
-        </Button>
+        <Link
+          to="/chat"
+          className={cn(
+            buttonVariants(),
+            "inline-flex items-center justify-center",
+          )}
+        >
+          Generate roadmap
+        </Link>
       </div>
 
       {/* Filter tabs — All / In progress / Complete (UI-SPEC § Roadmap List) */}
@@ -111,9 +118,15 @@ export default function RoadmapsPage() {
           <p className="text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))] max-w-sm">
             Tell Mimir what you want to learn and we&apos;ll build a roadmap in seconds.
           </p>
-          <Button variant="jewel" asChild>
-            <Link to="/chat">Start your first roadmap</Link>
-          </Button>
+          <Link
+            to="/chat"
+            className={cn(
+              buttonVariants({ variant: "jewel" }),
+              "inline-flex items-center justify-center",
+            )}
+          >
+            Start your first roadmap
+          </Link>
         </div>
       )}
 
