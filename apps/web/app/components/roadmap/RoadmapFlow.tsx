@@ -246,6 +246,15 @@ function RoadmapFlowInner({
         nodes={laidOutNodes}
         edges={laidOutEdges}
         nodeTypes={nodeTypes}
+        // React Flow's node wrapper consumes pointer events on touch before
+        // they reach the LessonNode button — wire the navigation through
+        // React Flow's blessed onNodeClick callback so taps fire reliably on
+        // touch devices. The button's onClick stays for keyboard / a11y but
+        // also routes through this same handler via the data.onClick closure.
+        onNodeClick={(_evt, node) => {
+          const data = node.data as unknown as { onClick?: () => void };
+          data.onClick?.();
+        }}
         // No grid/dot backdrop — omit `<Background>` entirely so the page bg
         // shows through. Disable controls + minimap for a clean mobile UX.
         fitView
@@ -266,7 +275,9 @@ function RoadmapFlowInner({
         }}
         nodesDraggable={false}
         nodesConnectable={false}
-        elementsSelectable={false}
+        // elementsSelectable MUST be true for onNodeClick to fire — React Flow
+        // wires node click detection through the selection layer.
+        elementsSelectable={true}
         // Hide React Flow's default panel borders + handles via no extra UI.
       />
     </div>
