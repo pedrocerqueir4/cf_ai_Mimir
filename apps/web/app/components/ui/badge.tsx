@@ -1,38 +1,48 @@
-import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
+import * as React from "react";
+import { Badge as KumoBadge } from "@cloudflare/kumo/components/badge";
+import { cn } from "~/lib/utils";
 
-import { cn } from "~/lib/utils"
+// Map old shadcn-style variants to Kumo's color-named variants.
+// Per CONTEXT D-01: amethyst retires to Kumo's purple (closest perceptual match for old "default").
+// `outline` maps directly — Kumo ships an `outline` variant (bordered, transparent bg).
+const VARIANT_MAP = {
+  default: "purple",
+  secondary: "neutral",
+  destructive: "red",
+  success: "green",
+  outline: "outline",
+} as const;
 
-const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-  {
-    variants: {
-      variant: {
-        default:
-          "border-transparent bg-[hsl(var(--dominant-soft))] text-[hsl(var(--dominant))] hover:bg-[hsl(var(--dominant-soft))]/80",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        destructive:
-          "border-transparent bg-[hsl(var(--destructive-soft))] text-destructive",
-        success:
-          "border-transparent bg-[hsl(var(--success-soft))] text-[hsl(var(--success))]",
-        outline: "text-foreground border-[hsl(var(--border-strong))]",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  }
-)
+type LegacyVariant = keyof typeof VARIANT_MAP;
 
-export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+type KumoBadgeProps = React.ComponentProps<typeof KumoBadge>;
 
-function Badge({ className, variant, ...props }: BadgeProps) {
-  return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
-  )
+export interface BadgeProps extends Omit<KumoBadgeProps, "variant"> {
+  variant?: LegacyVariant;
 }
 
-export { Badge, badgeVariants }
+function Badge({ className, variant = "default", ...props }: BadgeProps) {
+  return (
+    <KumoBadge
+      variant={VARIANT_MAP[variant]}
+      className={className}
+      {...props}
+    />
+  );
+}
+
+/**
+ * `badgeVariants` — passthrough shim. The shadcn cva-style helper produced a className
+ * string for direct use in className props; Kumo Badge encapsulates its variant styling
+ * internally and exposes no public class string. Audit returned 0 non-badge.tsx callers,
+ * so this stub exists purely to keep the legacy import surface type-safe; if any caller
+ * surfaces post-Phase 07 they should migrate to <Badge variant=...> JSX form.
+ */
+function badgeVariants(opts?: {
+  variant?: LegacyVariant;
+  className?: string;
+}) {
+  return cn(opts?.className);
+}
+
+export { Badge, badgeVariants };
