@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Progress } from "~/components/ui/progress";
-import { RoadmapNodeTree } from "~/components/roadmap/RoadmapNodeTree";
+import { RoadmapFlow } from "~/components/roadmap/RoadmapFlow";
 import { fetchRoadmapDetail } from "~/lib/api-client";
 
 export default function RoadmapDetailPage() {
@@ -108,8 +108,8 @@ export default function RoadmapDetailPage() {
         </div>
       </div>
 
-      {/* Lesson timeline — restyled via tokens; locked nodes have aria-disabled */}
-      <RoadmapNodeTree
+      {/* Lesson flow — React Flow viz with dagre auto-layout; nodes are buttons */}
+      <RoadmapFlow
         nodes={roadmap.nodes}
         completedLessonIds={completedLessonIds}
         roadmapId={roadmap.id}
