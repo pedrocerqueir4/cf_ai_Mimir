@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Drawer } from "@cloudflare/kumo/primitives/drawer";
+import { Drawer } from "@base-ui/react/drawer";
 import { cn } from "~/lib/utils";
 
 // Preserve the shadcn-shaped API for InLessonQASheet.tsx — no consumer rewrite.
