@@ -35,42 +35,51 @@ function computeNodeState(
   allNodes: RoadmapNode[],
   completedLessonIds: string[],
 ): LessonNodeState {
+  // Backend computes state correctly using ALL prerequisites — trust it.
   if (node.state) return node.state as LessonNodeState;
 
+  // Defensive fallback (should not normally fire — backend always sets state).
+  // Mirrors `worker/src/routes/roadmaps.ts` line 121-146 exactly: completed if
+  // this lesson done; otherwise "all prereqs complete" → available, else locked;
+  // bare order>0 nodes use "all preceding complete" backend fallback.
   if (node.lessonId && completedLessonIds.includes(node.lessonId)) {
     return "completed";
   }
 
-  if (!node.parentId && node.order === 0) return "available";
-
-  if (node.parentId) {
-    const parent = allNodes.find((n) => n.id === node.parentId);
-    if (!parent) return "available";
-    const parentState = computeNodeState(parent, allNodes, completedLessonIds);
-    if (parentState !== "completed") return "locked";
-    return "available";
+  const prereqs = node.prerequisites ?? [];
+  if (prereqs.length > 0) {
+    const allPrereqsComplete = prereqs.every((prereqId) => {
+      const prereq = allNodes.find((n) => n.id === prereqId);
+      return Boolean(
+        prereq?.lessonId && completedLessonIds.includes(prereq.lessonId),
+      );
+    });
+    return allPrereqsComplete ? "available" : "locked";
   }
 
-  if (node.order > 0) {
-    const allPrecedingComplete = allNodes
-      .filter((n) => n.order < node.order && !n.parentId)
-      .every((n) => n.lessonId && completedLessonIds.includes(n.lessonId));
-    return allPrecedingComplete ? "available" : "locked";
-  }
+  if (node.order === 0) return "available";
 
-  return "available";
+  const allPrecedingComplete = allNodes
+    .filter((n) => n.order < node.order)
+    .every((n) => n.lessonId && completedLessonIds.includes(n.lessonId));
+  return allPrecedingComplete ? "available" : "locked";
 }
 
 // ─── Edge derivation ──────────────────────────────────────────────────────────
 //
-// Edges mirror `computeNodeState`'s unlock semantics so every drawn line
-// answers the question "what must be completed to unlock this node?":
-//   - Node with parentId → unlocked when parent completes → edge from parent
-//   - Non-parented node at order > 0 → unlocked when ALL preceding non-parented
-//     nodes complete → fan-in edges from each one
-// The `complexity` parameter is kept for API stability but no longer changes
-// edge derivation — the prior linear/branching split was the bug that caused
-// missing edges between top-level nodes in branching roadmaps.
+// Edges are sourced directly from the backend-provided `prerequisites: string[]`
+// on each node — one inbound edge per prereq. This mirrors the backend's unlock
+// semantics exactly (a node unlocks when ALL its prerequisites are completed,
+// see `worker/src/routes/roadmaps.ts` line 130-145). Prior versions used only
+// `parentId` (which was the FIRST prereq, dropped the rest) so nodes with
+// multiple prerequisites showed only one edge — and stayed locked after the
+// user completed that visible prereq because the OTHER (invisible) ones were
+// still incomplete.
+//
+// For roadmaps where prerequisites is empty but order > 0, fall back to the
+// backend's "all preceding nodes" rule (see worker line 137-145).
+//
+// `complexity` is kept for API stability but no longer changes edge derivation.
 
 function deriveEdges(
   nodes: RoadmapNode[],
@@ -88,22 +97,25 @@ function deriveEdges(
   const edges: Edge[] = [];
 
   for (const node of nodes) {
-    if (node.parentId) {
-      // Explicit parent → child unlock.
-      edges.push({
-        id: `e-${node.parentId}-${node.id}`,
-        source: node.parentId,
-        target: node.id,
-        type: "smoothstep",
-        style: edgeStyle(computedStates.get(node.parentId)),
-      });
+    const prereqs = node.prerequisites ?? [];
+
+    if (prereqs.length > 0) {
+      // Explicit prerequisites — one edge per prereq.
+      for (const prereqId of prereqs) {
+        // Skip dangling refs in case the API returns a stale prereq id.
+        if (!nodes.some((n) => n.id === prereqId)) continue;
+        edges.push({
+          id: `e-${prereqId}-${node.id}`,
+          source: prereqId,
+          target: node.id,
+          type: "smoothstep",
+          style: edgeStyle(computedStates.get(prereqId)),
+        });
+      }
     } else if (node.order > 0) {
-      // Non-parented node: every preceding non-parented node is a prerequisite
-      // (mirrors `computeNodeState` line 54-58 — "all preceding non-parented
-      // complete"). Draw an inbound edge from each.
-      const preceding = nodes.filter(
-        (n) => n.order < node.order && !n.parentId,
-      );
+      // Backend fallback: nodes with no prereqs but order>0 require all
+      // preceding nodes complete. Mirror the same edges client-side.
+      const preceding = nodes.filter((n) => n.order < node.order);
       for (const pre of preceding) {
         edges.push({
           id: `e-${pre.id}-${node.id}`,

@@ -34,6 +34,14 @@ export interface RoadmapNode {
   description: string;
   order: number;
   parentId: string | null;
+  /**
+   * Full prerequisite list — IDs of nodes that must be completed for this
+   * node to unlock. The visualization draws an edge from each prereq so a
+   * node with multiple unlock dependencies renders ALL incoming edges,
+   * not just the first one (which would have been exposed via parentId).
+   * `parentId` stays for back-compat / layout hints.
+   */
+  prerequisites: string[];
   state: "locked" | "available" | "in_progress" | "completed";
   children: RoadmapNode[];
 }

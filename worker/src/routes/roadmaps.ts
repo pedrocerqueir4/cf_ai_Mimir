@@ -156,6 +156,12 @@ roadmapRoutes.get("/:id", async (c) => {
       description: node.description ?? "",
       order: node.order,
       parentId,
+      // Full prerequisite list — the frontend draws an edge per prereq so a
+      // node with multiple prerequisites renders all incoming edges, not just
+      // the parentId. Without this the visualization showed only the first
+      // prereq, leading to "completed X but the connected node didn't unlock"
+      // because the OTHER prereqs (invisible to the UI) weren't done yet.
+      prerequisites: node.prerequisites,
       state,
       children: [] as Array<unknown>,
     };
