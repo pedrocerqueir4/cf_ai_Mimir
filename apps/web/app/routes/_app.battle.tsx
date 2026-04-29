@@ -76,7 +76,7 @@ export default function BattlePage() {
     <div className="px-4 pt-8 pb-24">
       {/* Hero — display-lg "Quiz Battle" + body subtitle (UI-SPEC § Battle Landing) */}
       <div className="text-center mb-10">
-        <h1 className="font-display text-[36px] leading-[1.1] -tracking-[0.01em] lg:text-[48px] lg:leading-[1.05]">
+        <h1 className="font-sans text-[36px] leading-[1.1] -tracking-[0.01em] lg:text-[48px] lg:leading-[1.05]">
           Quiz Battle
         </h1>
         <p className="text-[16px] leading-[1.5] text-[hsl(var(--fg-muted))] mt-3 max-w-md mx-auto">
