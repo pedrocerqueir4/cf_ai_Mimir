@@ -1,230 +1,41 @@
+/* Source order MATTERS — @source MUST come before @import "tailwindcss" (RESEARCH P-01) */
+@source "../node_modules/@cloudflare/kumo/dist/**/*.{js,jsx,ts,tsx}";
+@import "@cloudflare/kumo/styles/tailwind";
+
+/* Phase 06 fonts retained for non-Kumo components (gamification/reveals) */
 @import "@fontsource/rubik/latin-400.css";
 @import "@fontsource/rubik/latin-500.css";
 @import "@fontsource/rubik/latin-600.css";
-@import "@fontsource/rubik-mono-one/latin-400.css";
+/* Display font retired per CONTEXT D-01 — DO NOT re-add the legacy @fontsource display-mono import here */
+
 @import "tailwindcss" source(".");
 
+/*
+ * Phase 06 motion tokens preserved (audit-driven).
+ * Used by non-migrated components (gamification XPCounterDisplay, layout BottomNav/SidebarNav,
+ * battle reveals — Phase 04 motion lock) and by Wave 2-targeted primitives (button.tsx, progress.tsx)
+ * until those wrappers are retargeted in their respective waves.
+ *
+ * Audit (2026-04-29): grep -rE "var\(--(ease|duration)-" apps/web/app/ found 5 hits across:
+ *   - apps/web/app/components/layout/BottomNav.tsx (--duration-fast)
+ *   - apps/web/app/components/layout/SidebarNav.tsx (--duration-fast)
+ *   - apps/web/app/components/ui/progress.tsx (--duration-glide, --ease-celebrate) — Wave 2 retargets
+ *   - apps/web/app/components/ui/button.tsx (--duration-fast) — Wave 2 retargets
+ *   - apps/web/app/components/gamification/XPCounterDisplay.tsx (--duration-slow) — non-migrated
+ *
+ * Per task action note (line 234-235): KEEP these defs in a small @theme block at the bottom.
+ */
 @theme {
-  --font-sans: 'Rubik', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: 'Rubik Mono One', ui-monospace, 'SF Mono', Menlo, monospace;
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-chart-1: hsl(var(--chart-1));
-  --color-chart-2: hsl(var(--chart-2));
-  --color-chart-3: hsl(var(--chart-3));
-  --color-chart-4: hsl(var(--chart-4));
-  --color-chart-5: hsl(var(--chart-5));
-  --color-sidebar-background: hsl(var(--sidebar-background));
-  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
-  --color-sidebar-primary: hsl(var(--sidebar-primary));
-  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
-  --color-sidebar-accent: hsl(var(--sidebar-accent));
-  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
-  --color-sidebar-border: hsl(var(--sidebar-border));
-  --color-sidebar-ring: hsl(var(--sidebar-ring));
-  /* Net-new direct-named color utilities (UI-SPEC § Color) */
-  --color-bg-frosted: var(--bg-frosted);
-  --color-bg-overlay: var(--bg-overlay);
-  --color-celebration-from: hsl(var(--celebration-from));
-  --color-celebration-to: hsl(var(--celebration-to));
-  /* Spacing scale (UI-SPEC § Spacing — 12px dropped, 96px kept by force-approval) */
-  --spacing-2xs: 4px;
-  --spacing-xs: 8px;
-  --spacing-md: 16px;
-  --spacing-lg: 24px;
-  --spacing-xl: 32px;
-  --spacing-2xl: 48px;
-  --spacing-3xl: 64px;
-  --spacing-4xl: 96px;
-  /* Easing tokens (UI-SPEC § Motion vocabulary) */
   --ease-snap: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-celebrate: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-glide: cubic-bezier(0.16, 1, 0.3, 1);
-  /* Duration tokens (UI-SPEC § Motion vocabulary) */
   --duration-instant: 80ms;
   --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 320ms;
   --duration-glide: 480ms;
   --duration-theatrical: 800ms;
-  /* Radii (UI-SPEC § Radii) */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-  --radius-pill: 9999px;
-}
-
-@layer base {
-  :root {
-    /* shadcn back-compat HSL triplets retargeted to UI-SPEC light tokens */
-    --background: 264 33% 98%;
-    --foreground: 254 24% 9%;
-    --card: 0 0% 100%;
-    --card-foreground: 254 24% 9%;
-    --primary: 262 83% 58%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 264 25% 95%;
-    --secondary-foreground: 254 24% 9%;
-    --muted: 264 25% 95%;
-    --muted-foreground: 254 12% 39%;
-    --destructive: 0 73% 50%;
-    --destructive-foreground: 0 0% 100%;
-    --accent: 264 100% 95%;
-    --accent-foreground: 262 83% 58%;
-    --border: 261 22% 92%;
-    --input: 261 22% 92%;
-    --ring: 254 96% 76%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 254 24% 9%;
-    --radius: 0.625rem;
-    /* Net-new direct-named tokens (UI-SPEC § Color light-mode) */
-    --bg-base: 264 33% 98%;
-    --bg-elevated: 0 0% 100%;
-    --bg-subtle: 264 25% 95%;
-    --bg-frosted: rgba(255, 255, 255, 0.72);
-    --bg-overlay: rgba(11, 10, 18, 0.48);
-    --fg: 254 24% 9%;
-    --fg-muted: 254 12% 39%;
-    --fg-subtle: 254 11% 57%;
-    --dominant: 262 83% 58%;
-    --dominant-hover: 263 70% 50%;
-    --dominant-soft: 264 100% 95%;
-    --dominant-fg: 0 0% 100%;
-    --border-strong: 264 22% 84%;
-    --success: 161 94% 30%;
-    --success-soft: 152 76% 90%;
-    --success-fg: 0 0% 100%;
-    --destructive-soft: 0 96% 94%;
-    --destructive-fg: 0 0% 100%;
-    --celebration-from: 254 96% 76%;
-    --celebration-to: 0 91% 71%;
-    --shadow-sm: 0 1px 2px rgba(13, 11, 28, 0.06);
-    --shadow-md: 0 4px 12px rgba(13, 11, 28, 0.08);
-    --shadow-lg: 0 12px 32px rgba(13, 11, 28, 0.12);
-    --shadow-glow-amethyst: 0 0 0 4px rgba(167, 139, 250, 0.25);
-    --shadow-glow-emerald: 0 0 24px rgba(52, 211, 153, 0.35);
-    --shadow-glow-ruby: 0 0 24px rgba(248, 113, 113, 0.35);
-    --blur-sm: 8px;
-    --blur-md: 16px;
-    --blur-lg: 24px;
-    --chart-1: 262 83% 58%;
-    --chart-2: 161 94% 30%;
-    --chart-3: 0 73% 50%;
-    --chart-4: 199 89% 48%;
-    --chart-5: 38 92% 50%;
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 254 12% 39%;
-    --sidebar-primary: 262 83% 58%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 264 100% 95%;
-    --sidebar-accent-foreground: 262 83% 58%;
-    --sidebar-border: 261 22% 92%;
-    --sidebar-ring: 254 96% 76%;
-  }
-  .dark {
-    /* shadcn back-compat HSL triplets retargeted to UI-SPEC dark tokens */
-    --background: 252 26% 6%;          /* #0B0A12 */
-    --foreground: 264 25% 96%;          /* #F4F2F8 */
-    --card: 254 23% 10%;                /* #15131F */
-    --card-foreground: 264 25% 96%;
-    --primary: 254 96% 76%;             /* #A78BFA */
-    --primary-foreground: 252 26% 6%;
-    --secondary: 254 22% 13%;           /* #1B1828 */
-    --secondary-foreground: 264 25% 96%;
-    --muted: 254 22% 13%;
-    --muted-foreground: 261 18% 67%;    /* #A39DB8 */
-    --destructive: 0 91% 71%;           /* #F87171 */
-    --destructive-foreground: 0 70% 6%; /* #1A0606 */
-    --accent: 256 41% 21%;              /* #2B1F4D */
-    --accent-foreground: 254 96% 76%;
-    --border: 256 22% 18%;              /* #2A2638 */
-    --input: 256 22% 18%;
-    --ring: 254 96% 76%;
-    --popover: 254 23% 10%;
-    --popover-foreground: 264 25% 96%;
-    /* Net-new direct-named tokens (UI-SPEC § Color dark-mode) */
-    --bg-base: 252 26% 6%;
-    --bg-elevated: 254 23% 10%;
-    --bg-subtle: 254 22% 13%;
-    --bg-frosted: rgba(21, 19, 31, 0.62);
-    --bg-overlay: rgba(0, 0, 0, 0.64);
-    --fg: 264 25% 96%;
-    --fg-muted: 261 18% 67%;
-    --fg-subtle: 256 13% 47%;           /* #6E6885 */
-    --dominant: 254 96% 76%;
-    --dominant-hover: 258 90% 67%;      /* #8B5CF6 */
-    --dominant-soft: 256 41% 21%;
-    --dominant-fg: 252 26% 6%;
-    --border-strong: 256 22% 27%;       /* #3D3753 */
-    --success: 156 64% 51%;             /* #34D399 */
-    --success-soft: 162 51% 12%;        /* #0F2E25 */
-    --success-fg: 159 65% 4%;           /* #03110D */
-    --destructive-soft: 0 47% 15%;      /* #3A1414 */
-    --destructive-fg: 0 70% 6%;
-    --celebration-from: 254 96% 76%;
-    --celebration-to: 351 95% 71%;      /* #FB7185 */
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(167, 139, 250, 0.08);
-    --shadow-glow-amethyst: 0 0 32px rgba(167, 139, 250, 0.35);
-    --shadow-glow-emerald: 0 0 32px rgba(52, 211, 153, 0.45);
-    --shadow-glow-ruby: 0 0 32px rgba(248, 113, 113, 0.45);
-    --chart-1: 254 96% 76%;
-    --chart-2: 156 64% 51%;
-    --chart-3: 0 91% 71%;
-    --chart-4: 199 89% 64%;
-    --chart-5: 45 96% 64%;
-    --sidebar-background: 254 23% 10%;
-    --sidebar-foreground: 261 18% 67%;
-    --sidebar-primary: 254 96% 76%;
-    --sidebar-primary-foreground: 252 26% 6%;
-    --sidebar-accent: 256 41% 21%;
-    --sidebar-accent-foreground: 254 96% 76%;
-    --sidebar-border: 256 22% 18%;
-    --sidebar-ring: 254 96% 76%;
-  }
-}
-
-/* Skeleton shimmer keyframe (consumed by skeleton.tsx via the skeleton-shimmer class). */
-@keyframes skeleton-shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-.skeleton-shimmer {
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    hsl(var(--dominant-soft) / 0.6) 50%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  background-repeat: no-repeat;
-  animation: skeleton-shimmer 1.6s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .skeleton-shimmer {
-    animation: none;
-    background-image: none;
-  }
 }
 
 /*
@@ -253,4 +64,31 @@
    container so any path that crosses a node's bounding box visually loses. */
 .react-flow__edges {
   z-index: 1 !important;
+}
+
+/*
+ * Skeleton shimmer keyframe (consumed by skeleton.tsx via the skeleton-shimmer class).
+ * Wave 1: gradient color retargeted from `hsl(var(--dominant-soft) / 0.6)` → `var(--color-kumo-tint)`
+ * per PATTERNS CE-1 / RESEARCH theming reconciliation map (S-4).
+ */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-kumo-tint) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none;
+    background-image: none;
+  }
 }

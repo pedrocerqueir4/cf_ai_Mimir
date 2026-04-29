@@ -28,7 +28,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Meta />
         <Links />
       </head>
-      <body className="bg-background text-foreground antialiased">
+      <body className="bg-kumo-canvas text-kumo-default antialiased">
         {children}
         <Toaster />
         <ScrollRestoration />

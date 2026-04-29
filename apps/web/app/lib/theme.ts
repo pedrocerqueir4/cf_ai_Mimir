@@ -13,10 +13,16 @@ export function setStoredTheme(theme: Theme): void {
 
 export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
-  if (theme === "system") {
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    root.classList.toggle("dark", prefersDark);
+  const isDark =
+    theme === "dark" ||
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  // Dual-write per CONTEXT theming-reconciliation:
+  //   class="dark" — preserves any leftover Tailwind .dark: utilities
+  //   data-mode="dark" — Kumo's [data-mode="dark"] selector (theme-kumo.css)
+  root.classList.toggle("dark", isDark);
+  if (isDark) {
+    root.setAttribute("data-mode", "dark");
   } else {
-    root.classList.toggle("dark", theme === "dark");
+    root.removeAttribute("data-mode");
   }
 }
