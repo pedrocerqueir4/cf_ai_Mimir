@@ -1,18 +1,14 @@
-import { cn } from "~/lib/utils"
+import * as React from "react";
+import { cn } from "~/lib/utils";
 
-function Skeleton({
+export function Skeleton({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn(
-        "skeleton-shimmer rounded-[var(--radius-md)] bg-[hsl(var(--bg-subtle))]",
-        className
-      )}
+      className={cn("skeleton-shimmer rounded-md bg-kumo-fill", className)}
       {...props}
     />
-  )
+  );
 }
-
-export { Skeleton }
