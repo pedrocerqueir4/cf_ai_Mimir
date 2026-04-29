@@ -7,12 +7,7 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Skeleton } from "~/components/ui/skeleton";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "~/components/ui/tabs";
+import { Tabs, TabsContent, TabsList } from "~/components/ui/tabs";
 import { LeaderboardRow } from "~/components/battle/LeaderboardRow";
 import { fetchLeaderboard } from "~/lib/api-client";
 
@@ -83,18 +78,17 @@ export default function BattlePage() {
         </h1>
       </div>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="grid w-full grid-cols-3 mb-6">
-          <TabsTrigger value="create" className="min-h-12">
-            Create
-          </TabsTrigger>
-          <TabsTrigger value="join" className="min-h-12">
-            Join
-          </TabsTrigger>
-          <TabsTrigger value="leaderboard" className="min-h-12">
-            Leaderboard
-          </TabsTrigger>
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as string)}>
+        <TabsList
+          tabs={[
+            { value: "create", label: "Create" },
+            { value: "join", label: "Join" },
+            { value: "leaderboard", label: "Leaderboard" },
+          ]}
+          value={activeTab}
+          onValueChange={handleTabChange}
+          className="mb-6"
+        />
 
         <TabsContent value="create">
           <CreateTabPanel />
@@ -201,15 +195,15 @@ function LeaderboardTabPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <Tabs value={activeWindow} onValueChange={onWindowChange}>
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="week" className="min-h-12">
-            This week
-          </TabsTrigger>
-          <TabsTrigger value="all" className="min-h-12">
-            All time
-          </TabsTrigger>
-        </TabsList>
+      <Tabs value={activeWindow} onValueChange={(v) => onWindowChange(v as string)}>
+        <TabsList
+          tabs={[
+            { value: "week", label: "This week" },
+            { value: "all", label: "All time" },
+          ]}
+          value={activeWindow}
+          onValueChange={onWindowChange}
+        />
       </Tabs>
 
       {isLoading && (

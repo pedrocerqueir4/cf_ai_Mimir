@@ -6,7 +6,7 @@ import { fetchRoadmaps, type RoadmapListItem as RoadmapListItemType } from "~/li
 import { RoadmapListItem } from "~/components/roadmap/RoadmapListItem";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { Tabs, TabsList } from "~/components/ui/tabs";
 
 // UI-SPEC § Motion `list-reveal-stagger`:
 //   320ms total, 40ms stagger per item, opacity 0→1 + translateY 12px→0.
@@ -82,17 +82,15 @@ export default function RoadmapsPage() {
         onValueChange={(v) => setFilter(v as FilterTab)}
         className="mb-6"
       >
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="all" className="min-h-12">
-            All
-          </TabsTrigger>
-          <TabsTrigger value="in_progress" className="min-h-12">
-            In progress
-          </TabsTrigger>
-          <TabsTrigger value="complete" className="min-h-12">
-            Complete
-          </TabsTrigger>
-        </TabsList>
+        <TabsList
+          tabs={[
+            { value: "all", label: "All" },
+            { value: "in_progress", label: "In progress" },
+            { value: "complete", label: "Complete" },
+          ]}
+          value={filter}
+          onValueChange={(v) => setFilter(v as FilterTab)}
+        />
       </Tabs>
 
       {/* Loading state */}

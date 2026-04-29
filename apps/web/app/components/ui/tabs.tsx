@@ -1,53 +1,50 @@
-import * as React from "react"
-import * as TabsPrimitive from "@radix-ui/react-tabs"
+"use client";
+import * as React from "react";
+// Composite per RESEARCH § Pattern 2:
+//   - Base UI `Tabs.Root` is the structural state container (renders <div>)
+//   - Kumo `Tabs` is a *strip-only* component (data-driven via `tabs={[...]}`)
+//   - Base UI `Tabs.Panel` renders content matched by value
+// Kumo's Tabs alone has no content panel, so the composite is required.
+import { Tabs as KumoTabsStrip } from "@cloudflare/kumo/components/tabs";
+import { Tabs as BaseTabs } from "@cloudflare/kumo/primitives/tabs";
 
-import { cn } from "~/lib/utils"
+/**
+ * Tabs — structural state container (Base UI Tabs.Root).
+ * Wraps both the Kumo strip (visual list) and Base UI Panels (content).
+ */
+export const Tabs = BaseTabs.Root;
 
-const Tabs = TabsPrimitive.Root
+interface TabsListProps {
+  tabs: Array<{ value: string; label: string; disabled?: boolean }>;
+  value: string;
+  onValueChange: (value: string) => void;
+  className?: string;
+}
 
-const TabsList = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    className={cn(
-      "inline-flex h-14 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
-      className
-    )}
-    {...props}
-  />
-))
-TabsList.displayName = TabsPrimitive.List.displayName
+/**
+ * TabsList — Kumo's data-driven tab strip. Replaces shadcn's children-based
+ * composition with `tabs={[{value, label}]}`. The 2 consumer files
+ * (_app.battle.tsx, _app.roadmaps.tsx) are rewritten to this shape in the
+ * same plan task.
+ */
+export const TabsList = (props: TabsListProps) => <KumoTabsStrip {...props} />;
 
-const TabsTrigger = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm",
-      className
-    )}
-    {...props}
-  />
-))
-TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
+/**
+ * TabsContent — Base UI Tabs.Panel, value-matched. Same call shape as Phase 06.
+ */
+export const TabsContent = BaseTabs.Panel;
 
-const TabsContent = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content
-    ref={ref}
-    className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-      className
-    )}
-    {...props}
-  />
-))
-TabsContent.displayName = TabsPrimitive.Content.displayName
-
-export { Tabs, TabsList, TabsTrigger, TabsContent }
+/**
+ * TabsTrigger — DEPRECATED post-Phase 07. Kumo's strip encodes triggers in
+ * the `tabs` array. Throws if invoked to prevent silent breakage during
+ * migration; the 4-name import surface is preserved so adding a TabsTrigger
+ * import wouldn't crash builds, only renders.
+ */
+export const TabsTrigger: React.FC<{
+  value?: string;
+  children?: React.ReactNode;
+}> = () => {
+  throw new Error(
+    "[Phase 07] TabsTrigger is no longer used. Pass `tabs={[{value, label}]}` to TabsList instead.",
+  );
+};
