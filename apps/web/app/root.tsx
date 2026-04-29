@@ -13,6 +13,7 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { getStoredTheme, applyTheme } from "~/lib/theme";
 import { Toaster } from "~/components/ui/sonner";
+import { TooltipProvider } from "~/components/ui/tooltip";
 
 // Fonts now self-hosted via @fontsource imports in app.css (see Phase 06 Plan 1).
 // No <link rel="preload"> directives — trust @fontsource's font-display:swap default.
@@ -47,7 +48,9 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <TooltipProvider>
+        <Outlet />
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }
