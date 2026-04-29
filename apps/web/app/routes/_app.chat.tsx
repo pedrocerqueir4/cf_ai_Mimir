@@ -704,7 +704,7 @@ export default function ChatPage() {
           but the composer overlays content from its top edge, so we need
           ~160px clearance from the message-list bottom = pb-40. Desktop:
           composer ≈ 96px, no BottomNav, so pb-28 covers it. */}
-      <ScrollArea className="flex-1" type="scroll">
+      <ScrollArea className="flex-1">
         <div className="px-4 py-4 pb-40 lg:pb-28">
           {/* Top sentinel — fires loadOlder when visible. Rendered only when
               there's more history to avoid an observer on an unused node. */}
