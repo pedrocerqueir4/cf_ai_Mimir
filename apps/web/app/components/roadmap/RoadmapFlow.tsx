@@ -251,8 +251,10 @@ function RoadmapFlowInner({
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1, minZoom: 0.3 }}
         proOptions={{ hideAttribution: true }}
-        // Pan + zoom kept on for desktop and pinch-zoom on touch.
-        panOnDrag
+        // Pan with right-mouse only on desktop (panOnDrag={[2]}); single-finger
+        // touch never pans so taps reach the LessonNode buttons cleanly. Pinch
+        // still zooms the canvas on touch via zoomOnPinch.
+        panOnDrag={[2]}
         zoomOnScroll={false}
         zoomOnPinch
         zoomOnDoubleClick={false}
