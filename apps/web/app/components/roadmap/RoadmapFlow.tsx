@@ -63,58 +63,59 @@ function computeNodeState(
 
 // ─── Edge derivation ──────────────────────────────────────────────────────────
 //
-// For LINEAR roadmaps: we connect node[i] → node[i+1] in `order` ascending.
-// For BRANCHING roadmaps: edges follow the parentId tree.
+// Edges mirror `computeNodeState`'s unlock semantics so every drawn line
+// answers the question "what must be completed to unlock this node?":
+//   - Node with parentId → unlocked when parent completes → edge from parent
+//   - Non-parented node at order > 0 → unlocked when ALL preceding non-parented
+//     nodes complete → fan-in edges from each one
+// The `complexity` parameter is kept for API stability but no longer changes
+// edge derivation — the prior linear/branching split was the bug that caused
+// missing edges between top-level nodes in branching roadmaps.
 
 function deriveEdges(
   nodes: RoadmapNode[],
-  complexity: "linear" | "branching",
+  _complexity: "linear" | "branching",
   computedStates: Map<string, LessonNodeState>,
 ): Edge[] {
-  if (complexity === "linear") {
-    const sorted = [...nodes].sort((a, b) => a.order - b.order);
-    const edges: Edge[] = [];
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const from = sorted[i]!;
-      const to = sorted[i + 1]!;
-      const fromState = computedStates.get(from.id);
-      const active = fromState === "completed";
-      edges.push({
-        id: `e-${from.id}-${to.id}`,
-        source: from.id,
-        target: to.id,
-        type: "smoothstep",
-        style: {
-          stroke: active
-            ? "hsl(var(--dominant))"
-            : "hsl(var(--border))",
-          strokeWidth: active ? 2 : 1.5,
-        },
-      });
-    }
-    return edges;
-  }
+  const edgeStyle = (sourceState: LessonNodeState | undefined) => {
+    const active = sourceState === "completed";
+    return {
+      stroke: active ? "hsl(var(--dominant))" : "hsl(var(--border))",
+      strokeWidth: active ? 2 : 1.5,
+    };
+  };
 
-  // Branching: edges from parent → child via parentId.
   const edges: Edge[] = [];
+
   for (const node of nodes) {
     if (node.parentId) {
-      const parentState = computedStates.get(node.parentId);
-      const active = parentState === "completed";
+      // Explicit parent → child unlock.
       edges.push({
         id: `e-${node.parentId}-${node.id}`,
         source: node.parentId,
         target: node.id,
         type: "smoothstep",
-        style: {
-          stroke: active
-            ? "hsl(var(--dominant))"
-            : "hsl(var(--border))",
-          strokeWidth: active ? 2 : 1.5,
-        },
+        style: edgeStyle(computedStates.get(node.parentId)),
       });
+    } else if (node.order > 0) {
+      // Non-parented node: every preceding non-parented node is a prerequisite
+      // (mirrors `computeNodeState` line 54-58 — "all preceding non-parented
+      // complete"). Draw an inbound edge from each.
+      const preceding = nodes.filter(
+        (n) => n.order < node.order && !n.parentId,
+      );
+      for (const pre of preceding) {
+        edges.push({
+          id: `e-${pre.id}-${node.id}`,
+          source: pre.id,
+          target: node.id,
+          type: "smoothstep",
+          style: edgeStyle(computedStates.get(pre.id)),
+        });
+      }
     }
   }
+
   return edges;
 }
 

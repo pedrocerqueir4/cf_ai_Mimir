@@ -73,15 +73,14 @@ export default function BattlePage() {
   };
 
   return (
-    <div className="px-4 pt-8 pb-24">
-      {/* Hero — display-lg "Quiz Battle" + body subtitle (UI-SPEC § Battle Landing) */}
-      <div className="text-center mb-10">
-        <h1 className="font-sans text-[36px] leading-[1.1] -tracking-[0.01em] lg:text-[48px] lg:leading-[1.05]">
+    <div className="px-4 pt-6 pb-24">
+      {/* Hero — compact "Quiz Battle" headline only. Subtitle dropped per UAT
+          (was filler + persisted across all tabs including Leaderboard, eating
+          vertical space and pushing tabs out of the mobile thumb zone). */}
+      <div className="text-center mb-6">
+        <h1 className="font-sans text-[28px] leading-[1.15] -tracking-[0.01em] lg:text-[36px] lg:leading-[1.1]">
           Quiz Battle
         </h1>
-        <p className="text-[16px] leading-[1.5] text-[hsl(var(--fg-muted))] mt-3 max-w-md mx-auto">
-          Challenge your knowledge against other learners.
-        </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
