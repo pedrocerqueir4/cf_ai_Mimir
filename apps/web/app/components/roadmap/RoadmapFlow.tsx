@@ -68,18 +68,77 @@ function computeNodeState(
 // ─── Edge derivation ──────────────────────────────────────────────────────────
 //
 // Edges are sourced directly from the backend-provided `prerequisites: string[]`
-// on each node — one inbound edge per prereq. This mirrors the backend's unlock
-// semantics exactly (a node unlocks when ALL its prerequisites are completed,
-// see `worker/src/routes/roadmaps.ts` line 130-145). Prior versions used only
-// `parentId` (which was the FIRST prereq, dropped the rest) so nodes with
-// multiple prerequisites showed only one edge — and stayed locked after the
-// user completed that visible prereq because the OTHER (invisible) ones were
-// still incomplete.
+// on each node — one inbound edge per prereq. Then we apply transitive
+// reduction: drop edges that are redundant because a longer path through
+// another prereq already conveys the same reachability. Example:
+//   X requires [Y, Z]; Y requires [Z]
+// The Z → X edge is dropped because Z → Y → X already implies it. The unlock
+// LOGIC is unchanged (backend still requires all of [Y, Z] complete to unlock
+// X) — only the VISUAL edge set is minimized for readability.
 //
 // For roadmaps where prerequisites is empty but order > 0, fall back to the
 // backend's "all preceding nodes" rule (see worker line 137-145).
 //
 // `complexity` is kept for API stability but no longer changes edge derivation.
+
+/**
+ * Build a per-node set of ALL transitive ancestors (direct + indirect prereqs).
+ * Memoized + cycle-guarded.
+ */
+function buildAncestorsMap(
+  nodes: RoadmapNode[],
+): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  const byId = new Map(nodes.map((n) => [n.id, n] as const));
+
+  function computeAncestors(
+    nodeId: string,
+    visited: Set<string>,
+  ): Set<string> {
+    const cached = map.get(nodeId);
+    if (cached) return cached;
+    if (visited.has(nodeId)) return new Set(); // cycle guard
+
+    const node = byId.get(nodeId);
+    if (!node) return new Set();
+
+    const nextVisited = new Set(visited);
+    nextVisited.add(nodeId);
+
+    const ancestors = new Set<string>();
+    for (const p of node.prerequisites ?? []) {
+      ancestors.add(p);
+      const sub = computeAncestors(p, nextVisited);
+      for (const s of sub) ancestors.add(s);
+    }
+
+    map.set(nodeId, ancestors);
+    return ancestors;
+  }
+
+  for (const n of nodes) computeAncestors(n.id, new Set());
+  return map;
+}
+
+/**
+ * Filter `node.prerequisites` to its transitive reduction: drop any direct
+ * prereq `p` if some OTHER direct prereq `q` already has `p` in its ancestor
+ * closure. Result is the minimal set of edges that preserves reachability.
+ */
+function reducedPrereqs(
+  node: RoadmapNode,
+  ancestorsMap: Map<string, Set<string>>,
+): string[] {
+  const prereqs = node.prerequisites ?? [];
+  if (prereqs.length <= 1) return [...prereqs];
+
+  return prereqs.filter((p) => {
+    return !prereqs.some((q) => {
+      if (q === p) return false;
+      return ancestorsMap.get(q)?.has(p) ?? false;
+    });
+  });
+}
 
 function deriveEdges(
   nodes: RoadmapNode[],
@@ -94,14 +153,17 @@ function deriveEdges(
     };
   };
 
+  const ancestorsMap = buildAncestorsMap(nodes);
   const edges: Edge[] = [];
 
   for (const node of nodes) {
-    const prereqs = node.prerequisites ?? [];
+    const directPrereqs = node.prerequisites ?? [];
 
-    if (prereqs.length > 0) {
-      // Explicit prerequisites — one edge per prereq.
-      for (const prereqId of prereqs) {
+    if (directPrereqs.length > 0) {
+      // Explicit prerequisites — apply transitive reduction, then one edge
+      // per remaining (non-redundant) prereq.
+      const reduced = reducedPrereqs(node, ancestorsMap);
+      for (const prereqId of reduced) {
         // Skip dangling refs in case the API returns a stale prereq id.
         if (!nodes.some((n) => n.id === prereqId)) continue;
         edges.push({
@@ -114,15 +176,20 @@ function deriveEdges(
       }
     } else if (node.order > 0) {
       // Backend fallback: nodes with no prereqs but order>0 require all
-      // preceding nodes complete. Mirror the same edges client-side.
-      const preceding = nodes.filter((n) => n.order < node.order);
-      for (const pre of preceding) {
+      // preceding nodes complete. Mirror the same edges client-side, but
+      // only draw the IMMEDIATE preceding node's edge — the rest are
+      // transitively reachable via the chain (same reduction principle).
+      const sortedPreceding = nodes
+        .filter((n) => n.order < node.order)
+        .sort((a, b) => b.order - a.order); // descending — closest first
+      const immediate = sortedPreceding[0];
+      if (immediate) {
         edges.push({
-          id: `e-${pre.id}-${node.id}`,
-          source: pre.id,
+          id: `e-${immediate.id}-${node.id}`,
+          source: immediate.id,
           target: node.id,
           type: "smoothstep",
-          style: edgeStyle(computedStates.get(pre.id)),
+          style: edgeStyle(computedStates.get(immediate.id)),
         });
       }
     }
