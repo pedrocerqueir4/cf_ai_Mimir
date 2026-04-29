@@ -55,7 +55,7 @@ export function QuestionCountPicker({
                   : "border-[hsl(var(--border))] bg-[hsl(var(--bg-elevated))] text-[hsl(var(--fg-muted))] hover:bg-[hsl(var(--bg-subtle))]",
               )}
             >
-              <span className="font-display tabular-nums text-[22px] leading-[1.15]">
+              <span className="font-sans tabular-nums text-[22px] leading-[1.15]">
                 {count}
               </span>
               <span className="text-[14px] font-normal leading-[1.5]">{label}</span>

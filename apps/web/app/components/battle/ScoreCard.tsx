@@ -110,7 +110,7 @@ export function ScoreCard({
       {/* Score — `mono-num` Rubik Mono One; count-up via framer-motion. */}
       <motion.span
         aria-label={`${displayName} score`}
-        className="font-display tabular-nums text-[28px] leading-[1.15] lg:text-[36px] lg:leading-[1.1] text-foreground"
+        className="font-sans tabular-nums text-[28px] leading-[1.15] lg:text-[36px] lg:leading-[1.1] text-foreground"
       >
         {rounded}
       </motion.span>

@@ -268,7 +268,7 @@ function BattleResultsInner({ battleId }: { battleId: string }) {
           {/* Winner banner — display-lg Rubik Mono One */}
           <h1
             className={cn(
-              "text-center font-display leading-[1.05] -tracking-[0.01em]",
+              "text-center font-sans leading-[1.05] -tracking-[0.01em]",
               "text-[36px] lg:text-[48px]",
             )}
           >
@@ -279,7 +279,7 @@ function BattleResultsInner({ battleId }: { battleId: string }) {
           <div className="flex items-center gap-6">
             <span
               className={cn(
-                "font-display tabular-nums text-[36px] leading-[1.05] lg:text-[48px]",
+                "font-sans tabular-nums text-[36px] leading-[1.05] lg:text-[48px]",
                 isWin
                   ? "bg-gradient-to-r from-[hsl(var(--celebration-from))] to-[hsl(var(--celebration-to))] bg-clip-text text-transparent"
                   : "text-foreground",
@@ -292,7 +292,7 @@ function BattleResultsInner({ battleId }: { battleId: string }) {
             </span>
             <span
               className={cn(
-                "font-display tabular-nums text-[36px] leading-[1.05] lg:text-[48px]",
+                "font-sans tabular-nums text-[36px] leading-[1.05] lg:text-[48px]",
                 !isWin && !isDraw
                   ? "bg-gradient-to-r from-[hsl(var(--celebration-from))] to-[hsl(var(--celebration-to))] bg-clip-text text-transparent"
                   : "text-foreground",

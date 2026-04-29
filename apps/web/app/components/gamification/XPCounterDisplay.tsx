@@ -142,7 +142,7 @@ export function XPCounterDisplay({
     <span
       aria-live="polite"
       className={cn(
-        "font-display tabular-nums text-foreground transition-[filter] duration-[var(--duration-slow)]",
+        "font-sans tabular-nums text-foreground transition-[filter] duration-[var(--duration-slow)]",
         SIZE_CLASSES[size],
         isGlowing && "drop-shadow-[var(--shadow-glow-emerald)]",
         className

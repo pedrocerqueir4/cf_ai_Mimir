@@ -50,7 +50,7 @@ function LevelUpToastBody({ level }: LevelUpToastBodyProps) {
         Level Up
       </span>
       <span
-        className="font-display text-[48px] leading-none lg:text-[64px] bg-gradient-to-r from-[hsl(var(--celebration-from))] to-[hsl(var(--celebration-to))] bg-clip-text text-transparent"
+        className="font-sans text-[48px] leading-none lg:text-[64px] bg-gradient-to-r from-[hsl(var(--celebration-from))] to-[hsl(var(--celebration-to))] bg-clip-text text-transparent"
         aria-label={`Reached level ${level}`}
       >
         Level {level}

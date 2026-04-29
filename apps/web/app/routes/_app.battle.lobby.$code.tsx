@@ -254,7 +254,7 @@ function LobbyInner({
             aria-label={`Battle code ${displayCode.split("").join(" ")}`}
             className={cn(
               "inline-flex items-center rounded-[var(--radius-md)] bg-[hsl(var(--dominant-soft))] px-6 py-3",
-              "font-display tabular-nums text-[22px] leading-[1.15] lg:text-[28px]",
+              "font-sans tabular-nums text-[22px] leading-[1.15] lg:text-[28px]",
               "tracking-[0.25em] text-[hsl(var(--dominant))]",
             )}
           >

@@ -61,7 +61,7 @@ export function StatCard({
         <dt className="text-[13px] font-medium leading-[1.3] tracking-[0.01em] text-[hsl(var(--fg-muted))]">
           {label}
         </dt>
-        <dd className="font-display tabular-nums text-foreground text-[28px] leading-[1.15] lg:text-[36px] lg:leading-[1.1]">
+        <dd className="font-sans tabular-nums text-foreground text-[28px] leading-[1.15] lg:text-[36px] lg:leading-[1.1]">
           {primary}
         </dd>
         {delta && (

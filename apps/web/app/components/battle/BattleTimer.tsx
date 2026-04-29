@@ -115,7 +115,7 @@ export function BattleTimer({
         aria-hidden="true"
         animate={pulseAnim}
         className={cn(
-          "absolute inset-0 flex items-center justify-center font-display tabular-nums leading-[1.2]",
+          "absolute inset-0 flex items-center justify-center font-sans tabular-nums leading-[1.2]",
           "text-[22px] lg:text-[28px] lg:leading-[1.15]",
           isCritical
             ? "text-[hsl(var(--destructive))]"

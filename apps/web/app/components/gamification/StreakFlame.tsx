@@ -62,7 +62,7 @@ export function StreakFlame({
       >
         <Flame className="h-6 w-6" />
       </motion.span>
-      <span className="font-display tabular-nums text-foreground">{days}</span>
+      <span className="font-sans tabular-nums text-foreground">{days}</span>
     </span>
   );
 }

@@ -68,7 +68,7 @@ export function LeaderboardRow({ entry }: LeaderboardRowProps) {
           <div
             className={cn(
               "flex h-10 w-10 items-center justify-center rounded-full border-2 border-[hsl(var(--dominant))]",
-              "font-display tabular-nums text-[22px] leading-[1.15] text-[hsl(var(--dominant))] lg:text-[28px] lg:h-12 lg:w-12",
+              "font-sans tabular-nums text-[22px] leading-[1.15] text-[hsl(var(--dominant))] lg:text-[28px] lg:h-12 lg:w-12",
             )}
             aria-label={`Rank ${entry.rank}`}
           >
@@ -76,7 +76,7 @@ export function LeaderboardRow({ entry }: LeaderboardRowProps) {
           </div>
         ) : (
           <span
-            className="font-display tabular-nums text-[22px] leading-[1.15] text-[hsl(var(--fg-muted))] lg:text-[28px]"
+            className="font-sans tabular-nums text-[22px] leading-[1.15] text-[hsl(var(--fg-muted))] lg:text-[28px]"
             aria-label={`Rank ${entry.rank}`}
           >
             {entry.rank}
@@ -98,7 +98,7 @@ export function LeaderboardRow({ entry }: LeaderboardRowProps) {
       {/* Net XP — right-aligned mono-num emerald/ruby tint */}
       <p
         className={cn(
-          "font-display tabular-nums text-[18px] leading-[1.3]",
+          "font-sans tabular-nums text-[18px] leading-[1.3]",
           entry.netXp > 0
             ? "text-[hsl(var(--success))]"
             : entry.netXp < 0
