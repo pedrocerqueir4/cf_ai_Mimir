@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import {
   Sheet,
@@ -35,7 +35,6 @@ export function InLessonQASheet({
   lessonId,
 }: InLessonQASheetProps) {
   const navigate = useNavigate();
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Focus the input when the sheet opens
   useEffect(() => {
@@ -72,12 +71,10 @@ export function InLessonQASheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        variant="frosted"
         className="h-[60vh] p-0 flex flex-col"
         aria-label="Lesson Q&A"
         aria-modal="true"
         role="dialog"
-        ref={inputRef}
       >
         {/* Drag handle — UI-SPEC § Q&A Bottom Sheet */}
         <div
