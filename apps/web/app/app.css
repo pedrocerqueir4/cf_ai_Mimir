@@ -243,4 +243,14 @@
  */
 .react-flow__node {
   touch-action: manipulation !important;
+  /* Ensure node cards always render above edge lines so paths routing near
+     a node don't visually occlude its content. Beats React Flow's default
+     stacking when dagre lays out edges that cross the node area. */
+  z-index: 10 !important;
+}
+
+/* Edges sit below nodes — the SVG layer is positioned behind the HTML node
+   container so any path that crosses a node's bounding box visually loses. */
+.react-flow__edges {
+  z-index: 1 !important;
 }

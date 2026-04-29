@@ -86,6 +86,11 @@ function LessonNodeComponent({ data }: NodeProps) {
           onClick();
         }}
         className={cn(
+          // `nopan nodrag` are React Flow utility classes (see
+          // reactflow.dev/learn/customization/utility-classes): touching the
+          // button never initiates canvas pan or node drag, so tap-to-open
+          // works cleanly while pan-on-background is still enabled.
+          "nopan nodrag",
           "block w-[180px] min-h-12 rounded-[var(--radius-lg)] border p-3 text-left",
           "shadow-sm transition-shadow duration-[var(--dur-base)] motion-reduce:transition-none",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",

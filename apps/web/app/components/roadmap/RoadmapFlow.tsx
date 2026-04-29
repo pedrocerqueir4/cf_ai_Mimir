@@ -144,8 +144,8 @@ function layoutWithDagre(
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({
     rankdir: "TB",
-    nodesep: 32, // horizontal spacing between siblings
-    ranksep: 56, // vertical spacing between ranks
+    nodesep: 48, // horizontal spacing between siblings (raised from 32 — UAT)
+    ranksep: 96, // vertical spacing between ranks (raised from 56 — UAT)
     marginx: 16,
     marginy: 16,
   });
@@ -273,10 +273,14 @@ function RoadmapFlowInner({
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1, minZoom: 0.3 }}
         proOptions={{ hideAttribution: true }}
-        // Pan with right-mouse only on desktop (panOnDrag={[2]}); single-finger
-        // touch never pans so taps reach the LessonNode buttons cleanly. Pinch
-        // still zooms the canvas on touch via zoomOnPinch.
-        panOnDrag={[2]}
+        // Pan enabled on touch + left-mouse. The LessonNode button carries the
+        // `nopan nodrag` utility classes (per React Flow docs) so single-finger
+        // touch on a NODE doesn't accidentally pan the canvas — only touches
+        // on the .react-flow__pane background initiate pan. Tap-to-open on
+        // node still works (verified by app.css touch-action: manipulation
+        // override on .react-flow__node, which beats React Flow's inline
+        // touch-action: none — see xyflow/xyflow#5087).
+        panOnDrag={true}
         zoomOnScroll={false}
         zoomOnPinch
         zoomOnDoubleClick={false}
