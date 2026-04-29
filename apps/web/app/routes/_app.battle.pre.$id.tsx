@@ -6,7 +6,7 @@ import {
   useNavigate,
   useParams,
 } from "react-router";
-import { toast } from "sonner";
+import { toast } from "~/lib/toast";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { useSession } from "~/lib/auth-client";

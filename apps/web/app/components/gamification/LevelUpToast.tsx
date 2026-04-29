@@ -12,7 +12,7 @@
  * Plan 1 only ships the primitive.
  */
 import { motion, useReducedMotion } from "framer-motion";
-import { toast } from "sonner";
+import { toast } from "~/lib/toast";
 
 import { triggerConfetti } from "./CelebrationConfetti";
 

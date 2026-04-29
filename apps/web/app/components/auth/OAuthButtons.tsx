@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { toast } from "~/lib/toast";
 import { Button } from "~/components/ui/button";
 import { signIn } from "~/lib/auth-client";
 import { getRestorePath } from "~/lib/session";

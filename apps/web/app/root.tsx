@@ -12,7 +12,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Route } from "./+types/root";
 import "./app.css";
 import { getStoredTheme, applyTheme } from "~/lib/theme";
-import { Toaster } from "~/components/ui/sonner";
+import { Toasty } from "~/components/Toasty";
 import { TooltipProvider } from "~/components/ui/tooltip";
 
 // Fonts now self-hosted via @fontsource imports in app.css (see Phase 06 Plan 1).
@@ -30,8 +30,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body className="bg-kumo-canvas text-kumo-default antialiased">
-        {children}
-        <Toaster />
+        <Toasty>{children}</Toasty>
         <ScrollRestoration />
         <Scripts />
       </body>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSearchParams, Link } from "react-router";
 import { Loader2, Mail } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "~/lib/toast";
 
 import { authClient } from "~/lib/auth-client";
 

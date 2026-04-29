@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "~/lib/toast";
 import { cn } from "~/lib/utils";
 
 interface ReconnectOverlayProps {

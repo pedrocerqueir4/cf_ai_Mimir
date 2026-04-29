@@ -7,7 +7,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { motion, useReducedMotion } from "framer-motion";
-import { toast } from "sonner";
+import { toast } from "~/lib/toast";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { cn } from "~/lib/utils";

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, MessageCircleQuestion } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "~/lib/toast";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";

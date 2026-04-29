@@ -2,7 +2,7 @@ import { useState } from "react";
 import { CheckCircle, XCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "framer-motion";
-import { toast } from "sonner";
+import { toast } from "~/lib/toast";
 import { Card } from "~/components/ui/card";
 import { cn } from "~/lib/utils";
 import { submitQuizAnswer } from "~/lib/api-client";
