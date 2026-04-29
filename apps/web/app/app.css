@@ -39,6 +39,59 @@
 }
 
 /*
+ * Phase 06 → Kumo token alias layer (compat shim for non-migrated consumers).
+ *
+ * 30+ files outside Phase 07 scope (Phase 04 motion-locked battle reveals,
+ * gamification net-new components, layout, lesson, qa, route surfaces) still
+ * reference shadcn-era Tailwind utilities like `bg-background`, `text-foreground`,
+ * `bg-card`, `text-destructive`, `border-border`, `ring-ring`, etc. and direct
+ * CSS vars like `var(--accent)`, `var(--border)`, `var(--dominant)`.
+ *
+ * Per CONTEXT D-01 + D-01a this is NOT a Kumo brand override — it's a backwards-
+ * compatibility translation so the legacy class names render with Kumo tokens
+ * until those consumers can be migrated in a follow-up phase.
+ */
+@theme {
+  --color-background: var(--color-kumo-canvas);
+  --color-foreground: var(--color-kumo-default);
+  --color-card: var(--color-kumo-base);
+  --color-card-foreground: var(--color-kumo-default);
+  --color-popover: var(--color-kumo-base);
+  --color-popover-foreground: var(--color-kumo-default);
+  --color-primary: var(--color-kumo-brand);
+  --color-primary-foreground: #fff;
+  --color-secondary: var(--color-kumo-fill);
+  --color-secondary-foreground: var(--color-kumo-default);
+  --color-muted: var(--color-kumo-tint);
+  --color-muted-foreground: var(--color-kumo-subtle);
+  --color-accent: var(--color-kumo-fill);
+  --color-accent-foreground: var(--color-kumo-default);
+  --color-destructive: var(--color-kumo-danger);
+  --color-destructive-foreground: #fff;
+  --color-success: var(--color-kumo-success);
+  --color-border: var(--color-kumo-line);
+  --color-input: var(--color-kumo-line);
+  --color-ring: var(--color-kumo-brand);
+  --color-dominant: var(--color-kumo-brand);
+}
+
+:root {
+  --background: var(--color-kumo-canvas);
+  --foreground: var(--color-kumo-default);
+  --card: var(--color-kumo-base);
+  --primary: var(--color-kumo-brand);
+  --secondary: var(--color-kumo-fill);
+  --muted: var(--color-kumo-tint);
+  --accent: var(--color-kumo-fill);
+  --destructive: var(--color-kumo-danger);
+  --success: var(--color-kumo-success);
+  --border: var(--color-kumo-line);
+  --input: var(--color-kumo-line);
+  --ring: var(--color-kumo-brand);
+  --dominant: var(--color-kumo-brand);
+}
+
+/*
  * React Flow custom-node touch fix (xyflow/xyflow#5087, OPEN as of v12.10.x).
  * React Flow inline-styles `touch-action: none` on every `.react-flow__node`
  * wrapper, which suppresses the browser's tap → click dispatch. Result:
