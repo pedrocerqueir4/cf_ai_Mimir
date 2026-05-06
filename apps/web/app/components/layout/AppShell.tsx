@@ -28,7 +28,7 @@ export function AppShell({ children, immersive = false }: AppShellProps) {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background lg:h-screen lg:overflow-hidden">
       <SidebarNav />
       <div className="flex flex-1 flex-col">
         {/*
@@ -46,7 +46,7 @@ export function AppShell({ children, immersive = false }: AppShellProps) {
             <ThemeToggle />
           </div>
         </header>
-        <main className="flex-1 pb-20 lg:pb-4">
+        <main className="flex-1 pb-20 lg:overflow-y-auto lg:pb-4">
           <div className="mx-auto w-full max-w-[640px] px-4 pt-4 lg:max-w-[960px]">
             {children}
           </div>
