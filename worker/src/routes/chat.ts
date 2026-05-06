@@ -371,21 +371,45 @@ chatRoutes.get("/status/:workflowRunId", async (c) => {
     )
     .limit(1);
 
-  if (roadmap.length === 0) {
-    return c.json({ error: "Workflow not found" }, 404);
+  if (roadmap.length > 0) {
+    // Happy path — workflow persisted at least Step 1. Clamp into the [1,3]
+    // range the UI knows how to render. `currentStep` can legitimately be 0
+    // on rows that existed before ContentGenerationWorkflow started writing
+    // to the column — treating those as "at least step 1" is safe: they
+    // either complete shortly (status flips to 'complete') or fail
+    // (status='failed' → error state).
+    const rawStep = roadmap[0].currentStep ?? 0;
+    const step = Math.max(1, Math.min(3, rawStep || 1));
+    return c.json({
+      status: roadmap[0].status,
+      roadmapId: roadmap[0].id,
+      step,
+    });
   }
 
-  // Clamp into the [1,3] range the UI knows how to render. `currentStep`
-  // can legitimately be 0 on rows that existed before ContentGenerationWorkflow
-  // started writing to the column — treating those as "at least step 1" is
-  // safe: they either complete shortly (status flips to 'complete' and the
-  // bubble skips to success state) or they fail (status='failed' → error state).
-  const rawStep = roadmap[0].currentStep ?? 0;
-  const step = Math.max(1, Math.min(3, rawStep || 1));
-
-  return c.json({
-    status: roadmap[0].status,
-    roadmapId: roadmap[0].id,
-    step,
-  });
+  // No DB row — fall through to the Workflows binding. Catches two cases:
+  //   1. Step 1 hasn't persisted yet (race; report "generating", keep polling)
+  //   2. Step 1 threw before any insert — e.g. AI neurons quota exhausted —
+  //      so no row will ever exist. Report "failed" so the chat UI's poll
+  //      loop terminates instead of retrying the 404 forever.
+  // IDOR note: workflowRunId is a UUID v4 (122 bits entropy) chosen at
+  // create time; only the originating user holds it. Returning a binary
+  // running/errored signal to a holder of that UUID is acceptable for v1.
+  try {
+    const instance = await c.env.CONTENT_WORKFLOW.get(workflowRunId);
+    const wf = await instance.status();
+    if (wf.status === "errored" || wf.status === "terminated") {
+      return c.json({
+        status: "failed",
+        roadmapId: null,
+        step: 1,
+        error: typeof wf.error === "string" ? wf.error : "Workflow failed",
+      });
+    }
+    // Queued / running / waiting — Step 1 hasn't written to D1 yet.
+    return c.json({ status: "generating", roadmapId: null, step: 1 });
+  } catch {
+    // Workflow instance unknown to the binding — actual 404.
+    return c.json({ error: "Workflow not found" }, 404);
+  }
 });
