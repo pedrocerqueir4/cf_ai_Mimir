@@ -4,11 +4,22 @@
 
 > An AI-powered, gamified micro-learning platform that turns any topic into an adaptive roadmap of bite-sized lessons, quizzes, and real-time multiplayer battles — built end-to-end on Cloudflare.
 
-<!-- TODO: add screenshot -->
-
 Users describe what they want to learn via chat. Mimir generates a structured learning roadmap, bite-sized lessons with inline quizzes, a RAG-backed Q&A layer scoped to the user's own content, XP/streak gamification, and head-to-head quiz battles with server-authoritative, speed-weighted scoring.
 
 The entire stack — runtime, database, vector store, LLM, real-time coordination, durable pipelines, WAF — runs on Cloudflare. No external cloud providers.
+
+### Why "Mimir"?
+
+In Norse mythology, **Mímir** was a being renowned for his vast knowledge and wisdom. After he was beheaded, the god Odin preserved his head and consulted it for counsel. The name fits a platform whose whole purpose is to distill any subject into shareable knowledge — a head full of answers, on demand.
+
+### Preview
+
+| | |
+| :---: | :---: |
+| ![Home](assets/images/Home.png) | ![Roadmaps](assets/images/Roadmaps.png) |
+| **Home** — XP, streak, recent activity | **Roadmaps** — adaptive node-tree per topic |
+| ![Chat](assets/images/Chat.png) | ![Create Battle](assets/images/CreateBattle.png) |
+| **Chat** — describe what to learn, stream a roadmap | **Create Battle** — pick a roadmap, wager XP, share join code |
 
 ---
 
@@ -69,7 +80,7 @@ The entire stack — runtime, database, vector store, LLM, real-time coordinatio
 - Designed for mobile viewports first; desktop second
 - 48px minimum tap targets, thumb-zone navigation, bottom nav on small screens
 - React 19 + React Router 7 framework mode with SSR on Workers
-- Tailwind CSS v4 + shadcn/ui primitives + Framer Motion for pre-battle reveals
+- Tailwind CSS v4 + `@cloudflare/kumo` (Cloudflare's Base UI–based component library) + Framer Motion for pre-battle reveals
 
 ---
 
@@ -81,7 +92,7 @@ The entire stack — runtime, database, vector store, LLM, real-time coordinatio
 | HTTP        | Hono 4.12                                                     | Typed routing, middleware chain, CF Bindings generics                    |
 | Frontend    | React 19 + React Router 7 (framework mode)                    | SSR + loader-colocated data fetching on Workers                          |
 | State       | TanStack Query 5 + Zustand 5                                  | Server-state caching + transient client state (battle rooms, timers)     |
-| Styling     | Tailwind CSS 4 (`@tailwindcss/vite`) + shadcn/ui + Framer Motion | Mobile-first utilities, accessible primitives, reveal animations       |
+| Styling     | Tailwind CSS 4 (`@tailwindcss/vite`) + `@cloudflare/kumo` (Base UI) + Framer Motion | Mobile-first utilities, Cloudflare's accessible primitives, reveal animations |
 | Database    | Cloudflare D1 (SQLite) + Drizzle ORM 0.45 + Drizzle Kit       | Type-safe queries, schema migrations, strong consistency per invocation  |
 | Auth        | Better Auth 1.5 + Cloudflare Turnstile                        | Email/password + Google + GitHub OAuth, bot challenge on repeated fails  |
 | AI (LLM)    | Workers AI — `@cf/meta/llama-3.3-70b-instruct-fp8-fast`       | Roadmap, lesson, quiz, and battle question generation                    |
@@ -313,14 +324,18 @@ npx wrangler d1 migrations apply mimir-db --remote --config apps/web/wrangler.js
 
 ## Project Status
 
-Milestone v1 is executing across four feature areas:
+**Milestone v1.0 — complete.** All eight planned phases shipped end-to-end:
 
-| Area                                      | Status       |
+| Phase                                     | Status       |
 | ----------------------------------------- | ------------ |
-| 01. Foundation (auth + security)          | In progress  |
-| 02. AI Content Pipeline (roadmaps + RAG)  | In progress  |
-| 03. Gamification                          | Implemented  |
-| 04. Multiplayer Battles                   | In progress  |
+| 01. Foundation (auth + security)          | Complete     |
+| 02. AI Content Pipeline (roadmaps + RAG)  | Complete     |
+| 02.1 Integration fixes                    | Complete     |
+| 03. Gamification                          | Complete     |
+| 04. Multiplayer Battles                   | Complete     |
+| 05. Share-intent prefill removal          | Complete     |
+| 06. App-wide visual redesign              | Complete     |
+| 07. Migrate UI primitives to Kumo UI      | Complete     |
 
 ### v1 requirement coverage
 
@@ -331,10 +346,13 @@ Milestone v1 is executing across four feature areas:
 | AI Q&A (RAG + citations) | 4    | 4     |
 | Learning UX              | 4    | 4     |
 | Security                 | 6    | 6     |
-| Gamification             | 0    | 6     |
-| Multiplayer              | 2    | 5     |
+| Gamification             | 6    | 6     |
+| Multiplayer              | 5    | 5     |
 
-Gamification and several multiplayer requirements are implemented in code but still pending final verification.
+### Recent additions
+
+- **Phase 07 — Kumo UI migration.** Replaced shadcn/ui (Radix-based) with `@cloudflare/kumo` (Base UI–based) across 18 internal primitives + 38 consumer files. Theme retired Phase 06 amethyst in favor of Kumo's Cloudflare-aligned defaults. Toast bridge built over Kumo Toasty so the existing `toast()` API call sites kept working. Bundle delta: +514 KiB raw / +128 KiB gzipped.
+- **Phase 06 — App-wide visual redesign.** Compact heroes, frosted layers, motion vocabulary, reduced-motion audit across all surfaces.
 
 ---
 
