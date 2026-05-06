@@ -38,6 +38,16 @@ const MODEL_LESSON = "@cf/meta/llama-3.1-8b-instruct-fast";  // raw Markdown, no
 const MODEL_QUIZ = "@cf/meta/llama-3.1-8b-instruct-fast";    // json_schema supported
 const MODEL_EMBED = "@cf/baai/bge-large-en-v1.5" as const;
 
+// Workers AI defaults max_tokens to 256 for llama-3.1-8b-instruct-fast, which
+// truncates a 2-5 question json_schema quiz payload mid-string. The model
+// emits valid JSON prefix then `finish_reason=length` cuts it off inside
+// an `explanation` field. See debug session quiz-gen-truncated-finish-len
+// (2026-05-06); same root cause as battle-qgen-parse-and-504 (2026-04-23).
+// 4096 leaves generous headroom for the worst-case 5-question payload
+// (each ~400-600 tokens of JSON including options, correctOptionId, and
+// explanation prose) while staying well within the model's 24,576 context.
+const CONTENT_QUIZ_MAX_TOKENS = 4096;
+
 // ─── Lesson Markdown Parser ──────────────────────────────────────────────────
 // Lessons are generated as raw Markdown (no JSON wrapper) to avoid the
 // fundamental problem of LLMs escaping Markdown inside JSON strings.
@@ -421,6 +431,11 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
 
               // 8B-fast variant supports json_schema (on official JSON mode list).
               // Quiz JSON is short/structured — no long Markdown in string values.
+              //
+              // max_tokens MUST be set explicitly: Workers AI defaults to 256 for
+              // this model, which truncates a 2-5 question quiz payload mid-string
+              // and produces `finish_reason=length`. See CONTENT_QUIZ_MAX_TOKENS
+              // declaration above and debug session quiz-gen-truncated-finish-len.
               const aiResponse = await (this.env.AI.run as any)(
                 MODEL_QUIZ,
                 {
@@ -428,6 +443,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                     { role: "system", content: buildQuizSystemPrompt(lesson.content) },
                     { role: "user", content: "Generate comprehension quiz questions for this lesson." },
                   ],
+                  max_tokens: CONTENT_QUIZ_MAX_TOKENS,
                   response_format: {
                     type: "json_schema",
                     json_schema: QUIZ_JSON_SCHEMA,
