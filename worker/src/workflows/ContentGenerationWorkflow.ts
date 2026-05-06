@@ -334,6 +334,19 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                 "Start your response with a # heading containing the lesson title, then write the full lesson content in Markdown. Do NOT wrap the output in JSON — write raw Markdown only."
               );
 
+              // TODO(max_tokens): Step 2b lesson generation is currently unbounded —
+              // Workers AI defaults max_tokens to 256 for llama-3.1-8b-instruct-fast,
+              // which silently truncates lesson markdown mid-paragraph. Observed raw
+              // Markdown lengths in the 1100-1300 range strongly suggest this cap is
+              // already biting (a "full" lesson would naturally run 2-4KB).
+              //
+              // Step 3 quiz call below uses max_tokens: CONTENT_QUIZ_MAX_TOKENS (4096)
+              // for exactly this reason. Bump Step 2b to ~3000 next time we touch this:
+              //   const CONTENT_LESSON_MAX_TOKENS = 3000;
+              //   ...messages, max_tokens: CONTENT_LESSON_MAX_TOKENS
+              //
+              // Deferred per user direction (2026-05-06): ship the quiz fix first,
+              // bump lesson budget after we confirm quiz path is healthy end-to-end.
               const aiResponse = await (this.env.AI.run as any)(
                 MODEL_LESSON,
                 {
