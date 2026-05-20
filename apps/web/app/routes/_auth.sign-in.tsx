@@ -184,7 +184,7 @@ export default function SignInPage() {
                 control={form.control}
                 name="email"
                 render={({ field, fieldState }) => (
-                  <FormItem>
+                  <FormItem className="grid grid-cols-[128px_minmax(0,1fr)] items-center gap-x-3 gap-y-1 space-y-0">
                     <FormLabel>Email</FormLabel>
                     <FormControl>
                       <Input
@@ -196,7 +196,7 @@ export default function SignInPage() {
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="col-start-2" />
                   </FormItem>
                 )}
               />
@@ -205,7 +205,7 @@ export default function SignInPage() {
                 control={form.control}
                 name="password"
                 render={({ field, fieldState }) => (
-                  <FormItem>
+                  <FormItem className="grid grid-cols-[128px_minmax(0,1fr)] items-center gap-x-3 gap-y-1 space-y-0">
                     <FormLabel>Password</FormLabel>
                     <FormControl>
                       <Input
@@ -216,8 +216,8 @@ export default function SignInPage() {
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage />
-                    <div className="text-right">
+                    <FormMessage className="col-start-2" />
+                    <div className="col-start-2 text-right">
                       <Link
                         to="/auth/forgot-password"
                         className="text-sm text-primary underline-offset-4 hover:underline"

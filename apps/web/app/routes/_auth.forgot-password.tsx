@@ -142,7 +142,7 @@ export default function ForgotPasswordPage() {
                 control={form.control}
                 name="email"
                 render={({ field, fieldState }) => (
-                  <FormItem>
+                  <FormItem className="grid grid-cols-[128px_minmax(0,1fr)] items-center gap-x-3 gap-y-1 space-y-0">
                     <FormLabel>Email</FormLabel>
                     <FormControl>
                       <Input
@@ -154,7 +154,7 @@ export default function ForgotPasswordPage() {
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="col-start-2" />
                   </FormItem>
                 )}
               />
