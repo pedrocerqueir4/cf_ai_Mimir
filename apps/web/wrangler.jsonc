@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "mimir-web",
+	"name": "mimir",
 	"compatibility_date": "2025-04-04",
 	"main": "./workers/app.ts",
 	"compatibility_flags": [
@@ -58,7 +58,7 @@
 		}
 	],
 	"vars": {
-		"PUBLIC_URL": "https://mimir-web.pedrocerqueira137.workers.dev"
+		"PUBLIC_URL": "https://mimir.pedrocerqueira137.workers.dev"
 	},
 	"unsafe": {
 		"bindings": [
