@@ -81,14 +81,13 @@ ${nodeDescription ? `Node description: "${nodeDescription}"` : ""}
 Your task is to write a complete lesson for this node.
 
 Instructions:
-- Write a bite-sized lesson (500-2000 words) focused on a single concept.
+- Write a bite-sized lesson (300-700 words) focused on a single concept.
 - Use Markdown with headers (##, ###), bullet points, numbered lists, and code examples where appropriate.
-- The lesson should take 2-10 minutes to read.
+- The lesson should take 1-3 minutes to read.
+- Be concise. Skip introductions and recaps; get to the concept immediately.
 - Be clear, concrete, and use practical examples.
 - Assume the learner has completed prerequisite nodes in this roadmap.
-- Do NOT cover concepts from other nodes — stay focused on this single node's topic.
-
-Respond ONLY with valid JSON matching the provided schema. No prose, no markdown fences.`;
+- Do NOT cover concepts from other nodes — stay focused on this single node's topic.`;
 }
 
 /**
@@ -103,7 +102,7 @@ export const LESSON_JSON_SCHEMA = {
     },
     content: {
       type: "string",
-      description: "Full lesson content in Markdown format (500-2000 words)",
+      description: "Full lesson content in Markdown format (300-700 words)",
     },
   },
   required: ["title", "content"],
