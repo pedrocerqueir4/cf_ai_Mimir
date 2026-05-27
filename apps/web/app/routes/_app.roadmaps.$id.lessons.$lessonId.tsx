@@ -27,6 +27,14 @@ import { getLocalTimezone } from "~/lib/utils";
  * - "Knowledge Check" divider + per-question feedback (3-phase state machine)
  * - One question visible at a time; "Next question" / "Finish lesson" advances
  * - "Mark complete" appears after the user taps "Finish lesson"
+ *
+ * Bottom padding strategy — mirrors the chat route fix (commit 0b0e144):
+ * The fixed action bar sits at `bottom-16` (64px above BottomNav) and is
+ * ~60px tall on Android / ~110px on iOS (with safe-area). AppShell <main>
+ * contributes pb-20 (80px) for BottomNav clearance. The lesson wrapper adds
+ * pb-24 (96px) on mobile so the last content element clears the bar's top
+ * edge with comfortable margin even on iOS. Desktop needs only pb-6 since
+ * there is no BottomNav and the bar sits at bottom-0.
  */
 export default function LessonPage() {
   const { id: roadmapId, lessonId } = useParams<{
@@ -62,7 +70,7 @@ export default function LessonPage() {
   // ─── Loading State ────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="pb-32">
+      <div className="pb-24 lg:pb-6">
         <div className="px-4 pt-6 mb-4">
           <Skeleton className="h-5 w-28 rounded mb-3" />
           <Skeleton className="h-7 w-3/4 rounded" />
@@ -155,7 +163,7 @@ export default function LessonPage() {
 
   // ─── Data State ───────────────────────────────────────────────────────────────
   return (
-    <div className="pb-32">
+    <div className="pb-24 lg:pb-6">
       {/* Top frosted bar — sticks just below the AppShell status bar (h-14). */}
       <header className="sticky top-14 z-30 flex items-center gap-3 border-b border-[hsl(var(--border))] bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card px-4 py-3">
         <Link
@@ -268,8 +276,14 @@ export default function LessonPage() {
       </article>
 
       {/* Bottom frosted action bar — Q&A icon button only.
-          (Mark complete lives inline at end of page after the quiz / lesson body.) */}
-      <div className="fixed bottom-16 lg:bottom-0 left-0 right-0 z-30 flex min-h-12 items-center justify-end border-t border-[hsl(var(--border))] bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+          (Mark complete lives inline at end of page after the quiz / lesson body.)
+          Always `fixed` so it overlays content rather than pushing it down:
+            • Mobile (< lg): bottom-16 sits above the BottomNav (h-16 = 64px).
+              `left-0 right-0` spans full viewport width; safe-area padding
+              handles iOS home-bar inset.
+            • Desktop (lg+): bottom-0 flush to viewport bottom; left-[280px]
+              clears the SidebarNav (lg:w-[280px]). */}
+      <div className="fixed bottom-16 lg:bottom-0 left-0 right-0 z-30 flex min-h-12 items-center justify-end border-t border-[hsl(var(--border))] bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:left-[280px]">
         <Button
           id="ask-ai-btn"
           variant="ghost"
