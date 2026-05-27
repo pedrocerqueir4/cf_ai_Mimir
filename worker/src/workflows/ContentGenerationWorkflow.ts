@@ -48,6 +48,14 @@ const MODEL_EMBED = "@cf/baai/bge-large-en-v1.5" as const;
 // explanation prose) while staying well within the model's 24,576 context.
 const CONTENT_QUIZ_MAX_TOKENS = 4096;
 
+// Workers AI defaults max_tokens to 256 for llama-3.1-8b-instruct-fast;
+// lesson Markdown is silently truncated at ~1200-1400 chars (observed avg 1278,
+// all 40 production rows end mid-sentence). Empirically confirmed via D1 query
+// 2026-05-27 (debug session lesson-text-appears-cut). See also commit b115977.
+// 3000 targets 2-4 KB of lesson prose with headroom; well within the 24,576
+// token context window.
+const CONTENT_LESSON_MAX_TOKENS = 3000;
+
 // ─── Lesson Markdown Parser ──────────────────────────────────────────────────
 // Lessons are generated as raw Markdown (no JSON wrapper) to avoid the
 // fundamental problem of LLMs escaping Markdown inside JSON strings.
@@ -334,19 +342,12 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                 "Start your response with a # heading containing the lesson title, then write the full lesson content in Markdown. Do NOT wrap the output in JSON — write raw Markdown only."
               );
 
-              // TODO(max_tokens): Step 2b lesson generation is currently unbounded —
-              // Workers AI defaults max_tokens to 256 for llama-3.1-8b-instruct-fast,
-              // which silently truncates lesson markdown mid-paragraph. Observed raw
-              // Markdown lengths in the 1100-1300 range strongly suggest this cap is
-              // already biting (a "full" lesson would naturally run 2-4KB).
-              //
-              // Step 3 quiz call below uses max_tokens: CONTENT_QUIZ_MAX_TOKENS (4096)
-              // for exactly this reason. Bump Step 2b to ~3000 next time we touch this:
-              //   const CONTENT_LESSON_MAX_TOKENS = 3000;
-              //   ...messages, max_tokens: CONTENT_LESSON_MAX_TOKENS
-              //
-              // Deferred per user direction (2026-05-06): ship the quiz fix first,
-              // bump lesson budget after we confirm quiz path is healthy end-to-end.
+              // max_tokens MUST be set explicitly: Workers AI defaults to 256 for
+              // llama-3.1-8b-instruct-fast, which silently truncates lesson Markdown
+              // mid-sentence. All 40 production rows confirmed truncated at avg 1278
+              // chars (debug session lesson-text-appears-cut, 2026-05-27; commit b115977).
+              // 3000 targets 2-4 KB of prose with headroom — same pattern as
+              // CONTENT_QUIZ_MAX_TOKENS above.
               const aiResponse = await (this.env.AI.run as any)(
                 MODEL_LESSON,
                 {
@@ -354,6 +355,7 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
                     { role: "system", content: lessonSystemPrompt },
                     { role: "user", content: `Write the lesson for: ${node.title}` },
                   ],
+                  max_tokens: CONTENT_LESSON_MAX_TOKENS,
                 },
               );
 
