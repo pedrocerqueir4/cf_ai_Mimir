@@ -3,6 +3,7 @@ import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
+import { classifyAIError, QUOTA_EXHAUSTED_MESSAGE } from "../lib/ai-errors";
 import {
   RoadmapOutputSchema,
   LessonOutputSchema,
@@ -207,19 +208,31 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
         async () => {
           const db = drizzle(this.env.DB, { schema });
 
-          const aiResponse = await this.env.AI.run(
-            MODEL_ROADMAP,
-            {
-              messages: [
-                { role: "system", content: buildRoadmapSystemPrompt() },
-                { role: "user", content: `Create a learning roadmap for: ${topic}` },
-              ],
-              response_format: {
-                type: "json_schema",
-                json_schema: ROADMAP_JSON_SCHEMA,
-              },
-            } as any,
-          );
+          let aiResponse: unknown;
+          try {
+            aiResponse = await this.env.AI.run(
+              MODEL_ROADMAP,
+              {
+                messages: [
+                  { role: "system", content: buildRoadmapSystemPrompt() },
+                  { role: "user", content: `Create a learning roadmap for: ${topic}` },
+                ],
+                response_format: {
+                  type: "json_schema",
+                  json_schema: ROADMAP_JSON_SCHEMA,
+                },
+              } as any,
+            );
+          } catch (err) {
+            // Step 1 throws before insert — roadmapId is still null, so we
+            // cannot write a failed_quota row. Re-throw; the GET /status
+            // endpoint's Workflows-binding fallback inspects wf.error and
+            // will classify it as failed_quota if applicable.
+            if (classifyAIError(err) === "quota_exhausted") {
+              console.error(`[Workflow] Step 1: quota exhausted before insert`);
+            }
+            throw err;
+          }
 
           const parsed = parseAIResponse(aiResponse);
           const validated = RoadmapOutputSchema.parse(parsed);
@@ -348,16 +361,28 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
               // chars (debug session lesson-text-appears-cut, 2026-05-27; commit b115977).
               // 3000 targets 2-4 KB of prose with headroom — same pattern as
               // CONTENT_QUIZ_MAX_TOKENS above.
-              const aiResponse = await (this.env.AI.run as any)(
-                MODEL_LESSON,
-                {
-                  messages: [
-                    { role: "system", content: lessonSystemPrompt },
-                    { role: "user", content: `Write the lesson for: ${node.title}` },
-                  ],
-                  max_tokens: CONTENT_LESSON_MAX_TOKENS,
-                },
-              );
+              let aiResponse: unknown;
+              try {
+                aiResponse = await (this.env.AI.run as any)(
+                  MODEL_LESSON,
+                  {
+                    messages: [
+                      { role: "system", content: lessonSystemPrompt },
+                      { role: "user", content: `Write the lesson for: ${node.title}` },
+                    ],
+                    max_tokens: CONTENT_LESSON_MAX_TOKENS,
+                  },
+                );
+              } catch (err) {
+                if (classifyAIError(err) === "quota_exhausted") {
+                  const db2 = drizzle(this.env.DB, { schema });
+                  await db2.update(schema.roadmaps)
+                    .set({ status: "failed_quota", errorMessage: QUOTA_EXHAUSTED_MESSAGE, updatedAt: new Date() })
+                    .where(eq(schema.roadmaps.id, roadmapId!));
+                  console.error(`[Workflow] Step 2b: quota exhausted — roadmap marked failed_quota`);
+                }
+                throw err; // Workflows must terminate the step; do not swallow.
+              }
 
               // Extract raw text from AI response
               const rawMarkdown =
@@ -451,20 +476,32 @@ export class ContentGenerationWorkflow extends WorkflowEntrypoint<Env, ContentPa
               // this model, which truncates a 2-5 question quiz payload mid-string
               // and produces `finish_reason=length`. See CONTENT_QUIZ_MAX_TOKENS
               // declaration above and debug session quiz-gen-truncated-finish-len.
-              const aiResponse = await (this.env.AI.run as any)(
-                MODEL_QUIZ,
-                {
-                  messages: [
-                    { role: "system", content: buildQuizSystemPrompt(lesson.content) },
-                    { role: "user", content: "Generate comprehension quiz questions for this lesson." },
-                  ],
-                  max_tokens: CONTENT_QUIZ_MAX_TOKENS,
-                  response_format: {
-                    type: "json_schema",
-                    json_schema: QUIZ_JSON_SCHEMA,
+              let aiResponse: unknown;
+              try {
+                aiResponse = await (this.env.AI.run as any)(
+                  MODEL_QUIZ,
+                  {
+                    messages: [
+                      { role: "system", content: buildQuizSystemPrompt(lesson.content) },
+                      { role: "user", content: "Generate comprehension quiz questions for this lesson." },
+                    ],
+                    max_tokens: CONTENT_QUIZ_MAX_TOKENS,
+                    response_format: {
+                      type: "json_schema",
+                      json_schema: QUIZ_JSON_SCHEMA,
+                    },
                   },
-                },
-              );
+                );
+              } catch (err) {
+                if (classifyAIError(err) === "quota_exhausted") {
+                  const db2 = drizzle(this.env.DB, { schema });
+                  await db2.update(schema.roadmaps)
+                    .set({ status: "failed_quota", errorMessage: QUOTA_EXHAUSTED_MESSAGE, updatedAt: new Date() })
+                    .where(eq(schema.roadmaps.id, roadmapId!));
+                  console.error(`[Workflow] Step 3: quota exhausted — roadmap marked failed_quota`);
+                }
+                throw err; // Workflows must terminate the step; do not swallow.
+              }
 
               const parsed = parseAIResponse(aiResponse);
               const validated = QuizOutputSchema.parse(parsed);

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Send, Loader2, Check, CheckCircle } from "lucide-react";
+import { Send, Loader2, Check, CheckCircle, AlertTriangle } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 
 import { Button } from "~/components/ui/button";
@@ -19,7 +19,7 @@ import { randomId } from "~/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MessageRole = "user" | "assistant";
+type MessageRole = "user" | "assistant" | "system";
 
 interface LocalMessage {
   id: string;
@@ -125,6 +125,10 @@ function GenerationProgressBubble({
   const [isComplete, setIsComplete] = useState(false);
   const [isFailed, setIsFailed] = useState(false);
   const [completedRoadmapId, setCompletedRoadmapId] = useState<string | null>(null);
+  // Non-null when the failure is specifically a quota error — carries the
+  // verbatim message from errorMessage in the API response. When null and
+  // isFailed is true, the generic destructive bubble renders instead.
+  const [quotaMessage, setQuotaMessage] = useState<string | null>(null);
   const onCompleteRef = useRef(onComplete);
   const onFailedRef = useRef(onFailed);
   onCompleteRef.current = onComplete;
@@ -135,7 +139,7 @@ function GenerationProgressBubble({
     queryFn: () => pollGenerationStatus(workflowRunId),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      if (status === "complete" || status === "failed") return false;
+      if (status === "complete" || status === "failed" || status === "failed_quota") return false;
       return 3000;
     },
     enabled: !isComplete && !isFailed,
@@ -149,6 +153,11 @@ function GenerationProgressBubble({
       setIsComplete(true);
       setCompletedRoadmapId(statusData.roadmapId);
       onCompleteRef.current(statusData.roadmapId);
+    } else if (statusData.status === "failed_quota") {
+      // Quota-specific failure — stash the verbatim message and signal parent.
+      setIsFailed(true);
+      setQuotaMessage(statusData.errorMessage ?? "Daily AI quota reached.");
+      onFailedRef.current();
     } else if (statusData.status === "failed") {
       setIsFailed(true);
       onFailedRef.current();
@@ -159,6 +168,11 @@ function GenerationProgressBubble({
   }, [statusData]);
 
   if (isFailed) {
+    // Quota-exhausted: render the shared amber SystemWarningBubble.
+    if (quotaMessage) {
+      return <SystemWarningBubble message={quotaMessage} />;
+    }
+    // Generic failure: keep existing destructive treatment.
     return (
       <div className="flex items-start gap-3">
         <Avatar className="h-8 w-8 shrink-0">
@@ -235,6 +249,33 @@ function GenerationProgressBubble({
   );
 }
 
+// ─── System Warning Bubble ────────────────────────────────────────────────────
+
+/**
+ * Amber inline bubble used for quota-exhaustion errors. Rendered for both:
+ *   - SSE path: when `event: system_warning` arrives in the stream reader.
+ *   - Workflow path: when GenerationProgressBubble polls status=failed_quota.
+ * Intentionally inline in the conversation thread (not a toast or sticky banner).
+ */
+function SystemWarningBubble({ message }: { message: string }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-start gap-3"
+    >
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[hsl(38_92%_50%)] bg-[hsl(38_92%_50%/0.1)]">
+        <AlertTriangle size={16} className="text-[hsl(38_92%_50%)]" aria-hidden="true" />
+      </div>
+      <div className="max-w-[80%] rounded-[var(--radius-lg)] border border-[hsl(38_92%_50%)] bg-[hsl(38_92%_50%/0.1)] p-4">
+        <p className="text-[14px] leading-[1.5] text-[hsl(var(--fg))]">
+          {message}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Typing Indicator ─────────────────────────────────────────────────────────
 
 function TypingIndicator() {
@@ -276,6 +317,12 @@ function MessageBubble({ message }: MessageBubbleProps) {
     hour: "2-digit",
     minute: "2-digit",
   });
+
+  // System messages (quota errors) render as amber warning bubbles — no avatar,
+  // no timestamp. Must be checked before the typing/generation guards below.
+  if (message.role === "system") {
+    return <SystemWarningBubble message={message.content} />;
+  }
 
   if (message.isTyping) {
     return <TypingIndicator />;
@@ -583,8 +630,12 @@ export default function ChatPage() {
 
         const decoder = new TextDecoder();
         let buffer = "";
+        // Track the most recent `event:` line so the next `data:` line can
+        // branch on it. SSE spec: event name applies to the next data line
+        // in the same event block; reset to null after each event boundary.
+        let currentEvent: string | null = null;
 
-        while (true) {
+        outer: while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -593,8 +644,45 @@ export default function ChatPage() {
           buffer = lines.pop() ?? "";
 
           for (const line of lines) {
+            // Capture event name for the upcoming data line.
+            if (line.startsWith("event: ")) {
+              currentEvent = line.slice(7).trim();
+              continue;
+            }
+
             if (line.startsWith("data: ")) {
               const data = line.slice(6).trim();
+
+              // system_warning: replace typing indicator with an amber bubble,
+              // then break out of the read loop (server closes stream right after).
+              if (currentEvent === "system_warning") {
+                try {
+                  const parsed = JSON.parse(data) as { message?: string };
+                  if (parsed.message) {
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === typingId
+                          ? {
+                              id: randomId(),
+                              role: "system" as MessageRole,
+                              content: parsed.message!,
+                              createdAt: new Date().toISOString(),
+                            }
+                          : m
+                      )
+                    );
+                  }
+                } catch {
+                  // Malformed system_warning payload — fall back to generic error
+                }
+                currentEvent = null;
+                // Server closes the stream after this event; exit cleanly.
+                await reader.cancel().catch(() => {});
+                break outer;
+              }
+
+              currentEvent = null;
+
               if (data === "[DONE]") continue;
               try {
                 const parsed = JSON.parse(data) as { response?: string; text?: string };
@@ -619,6 +707,9 @@ export default function ChatPage() {
                 );
               }
             }
+
+            // Blank line = SSE event boundary; reset event name.
+            if (line.trim() === "") currentEvent = null;
           }
         }
       } else {

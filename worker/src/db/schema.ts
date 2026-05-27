@@ -24,7 +24,7 @@ export const roadmaps = sqliteTable("roadmaps", {
   title: text("title").notNull(),
   topic: text("topic").notNull(),
   complexity: text("complexity", { enum: ["linear", "branching"] }).notNull().default("linear"),
-  status: text("status", { enum: ["generating", "complete", "failed"] }).notNull().default("generating"),
+  status: text("status", { enum: ["generating", "complete", "failed", "failed_quota"] }).notNull().default("generating"),
   workflowRunId: text("workflow_run_id"),
   nodesJson: text("nodes_json").notNull().default("[]"),
   // Progress step written by ContentGenerationWorkflow as each major phase
@@ -42,6 +42,9 @@ export const roadmaps = sqliteTable("roadmaps", {
   // keeps pre-existing roadmap rows readable via the ORM; new rows inserted
   // by ContentGenerationWorkflow explicitly set `currentStep: 1`.
   currentStep: integer("current_step").notNull().default(0),
+  // errorMessage is set when status='failed_quota' to surface the verbatim
+  // QUOTA_EXHAUSTED_MESSAGE to the chat UI. For status='failed' it stays null.
+  errorMessage: text("error_message"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });

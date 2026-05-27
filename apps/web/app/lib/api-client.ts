@@ -130,9 +130,10 @@ export interface QAResponse {
 }
 
 export interface GenerationStatus {
-  status: "pending" | "generating" | "complete" | "failed";
+  status: "pending" | "generating" | "complete" | "failed" | "failed_quota";
   roadmapId?: string;
   step?: 1 | 2 | 3;
+  errorMessage?: string;
 }
 
 // Cursor-paginated chat history page.
