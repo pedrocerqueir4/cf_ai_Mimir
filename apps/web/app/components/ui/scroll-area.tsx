@@ -11,7 +11,7 @@ export const ScrollArea = React.forwardRef<
     className={cn("relative overflow-hidden", className)}
     {...props}
   >
-    <KumoScrollArea.Viewport className="h-full w-full rounded-[inherit]">
+    <KumoScrollArea.Viewport className="h-full max-h-[inherit] w-full rounded-[inherit]">
       {children}
     </KumoScrollArea.Viewport>
     <ScrollBar />
