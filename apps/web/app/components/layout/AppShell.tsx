@@ -20,15 +20,25 @@ export function AppShell({ children, immersive = false }: AppShellProps) {
     // No nav, no header, no content frame — the route renders its own
     // full-viewport layout. Keeps the reveal animations and the live
     // battle free from navigation exit-friction.
+    //
+    // min-h-dvh instead of min-h-screen: dvh tracks the actual dynamic
+    // viewport (shrinks when the mobile URL bar is visible), preventing the
+    // 100vh trap where min-height exceeds the visible area on iOS/Android.
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-dvh bg-background">
         {children}
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-background lg:h-screen lg:overflow-hidden">
+    // min-h-dvh instead of min-h-screen: on mobile browsers, 100vh equals the
+    // "large viewport" (URL bar hidden). When the URL bar is visible the actual
+    // visible height is shorter, so min-height: 100vh creates invisible blank
+    // space at the bottom that is scrollable — the classic mobile 100vh trap.
+    // 100dvh updates dynamically as the URL bar shows/hides, eliminating the gap.
+    // lg:h-screen is fine on desktop (no dynamic URL bar there).
+    <div className="flex min-h-dvh bg-background lg:h-screen lg:overflow-hidden">
       <SidebarNav />
       <div className="flex flex-1 flex-col">
         {/*

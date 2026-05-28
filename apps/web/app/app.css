@@ -11,6 +11,25 @@
 @import "tailwindcss" source(".");
 
 /*
+ * Prevent document-level overscroll / rubber-band bounce on mobile.
+ *
+ * Without this, iOS Safari and Chrome for Android allow the user to pull the
+ * page beyond its content boundary — producing the "content and bar scroll
+ * up into empty space" symptom reported in the lesson reader. Setting
+ * overscroll-behavior-y: none on html + body disables that elastic bounce
+ * at the document level while leaving inner scroll containers (ScrollArea,
+ * overflow-y-auto divs) unaffected — they inherit the default "auto".
+ *
+ * This is safe across all routes: the chat route uses an inner ScrollArea
+ * (not document scroll) so it is unaffected. Battle routes are immersive and
+ * also do not rely on document overscroll bounce for any UX affordance.
+ */
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
+/*
  * Phase 06 motion tokens preserved (audit-driven).
  * Used by non-migrated components (gamification XPCounterDisplay, layout BottomNav/SidebarNav,
  * battle reveals — Phase 04 motion lock) and by Wave 2-targeted primitives (button.tsx, progress.tsx)
