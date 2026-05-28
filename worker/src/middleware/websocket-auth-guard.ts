@@ -53,7 +53,7 @@ export async function websocketAuthGuard(
   }
 
   // 3. Better Auth session validation.
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, c.req.url);
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session) {
     return c.text("Unauthorized", 401);

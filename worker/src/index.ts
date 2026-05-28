@@ -27,7 +27,7 @@ app.post("/api/auth/sign-in/*", requireTurnstileAfterFailures);
 
 // Better Auth handles all auth routes
 app.on(["GET", "POST"], "/api/auth/*", (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, c.req.url);
   return auth.handler(c.req.raw);
 });
 

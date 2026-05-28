@@ -4,12 +4,24 @@ import { multiSession } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 
-export function createAuth(env: Env) {
+export function createAuth(env: Env, requestUrl?: string) {
   const db = drizzle(env.DB, { schema });
+  // baseURL MUST match the origin the session cookie was created on, otherwise
+  // Better Auth derives a different cookie name (https baseURL → `__Secure-`
+  // prefix) and getSession() can't find the session → 401. The login handler
+  // (apps/web/workers/app.ts getOrCreateAuth) uses the request origin, so this
+  // validator must too. PUBLIC_URL is only a fallback when no request is in
+  // scope. Without this, local dev (http://localhost) sets a plain cookie that
+  // the https PUBLIC_URL validator never reads.
+  const requestOrigin = requestUrl ? new URL(requestUrl).origin : undefined;
+  const baseURL = requestOrigin ?? env.PUBLIC_URL;
+  const trustedOrigins = Array.from(
+    new Set([env.PUBLIC_URL, requestOrigin].filter((v): v is string => !!v)),
+  );
   return betterAuth({
-    baseURL: env.PUBLIC_URL,
+    baseURL,
     database: drizzleAdapter(db, { provider: "sqlite", usePlural: true, schema }),
-    trustedOrigins: [env.PUBLIC_URL],
+    trustedOrigins,
     session: {
       expiresIn: 60 * 60 * 24 * 7, // 7 days per D-02
       cookieCache: { enabled: true, maxAge: 5 * 60 },
