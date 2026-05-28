@@ -63,6 +63,7 @@ const CREATE_STATEMENTS = [
     workflow_run_id TEXT,
     current_step INTEGER NOT NULL DEFAULT 0,
     nodes_json TEXT NOT NULL DEFAULT '[]',
+    error_message TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   )`,

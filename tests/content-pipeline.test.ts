@@ -136,7 +136,11 @@ describe("CONT-01: Topic prompt generates structured learning roadmap", () => {
     }
   });
 
-  it("Roadmap is stored in D1 with status 'generating' after chat trigger", async () => {
+  it("Workflow trigger acknowledgment is persisted to chat_messages in D1", async () => {
+    // The POST /message handler persists two chat_messages rows when it detects
+    // roadmap intent: (1) the user message, (2) an assistant acknowledgment with
+    // { type: "generation_started", workflowRunId }. The roadmaps row itself is
+    // written later by ContentGenerationWorkflow step 1 — not by the handler.
     const mockWorkflow = {
       create: async ({ id }: { id: string }) => ({ id }),
     };
@@ -156,12 +160,21 @@ describe("CONT-01: Topic prompt generates structured learning roadmap", () => {
     expect(res.status).toBe(202);
     const body = await res.json() as { workflowRunId: string };
 
+    // The handler persists an assistant chat_messages row with the workflowRunId
+    // embedded in JSON content — verify this acknowledgment was written to D1.
     const db = drizzle(env.DB, { schema });
-    const rows = await db.select().from(schema.roadmaps);
-    const roadmap = rows.find((r) => r.workflowRunId === body.workflowRunId);
-    expect(roadmap).toBeDefined();
-    expect(roadmap?.status).toBe("generating");
-    expect(roadmap?.userId).toBe(userId);
+    const rows = await db.select().from(schema.chatMessages);
+    const ackMessage = rows.find((r) => {
+      if (r.role !== "assistant") return false;
+      try {
+        const parsed = JSON.parse(r.content) as { type?: string; workflowRunId?: string };
+        return parsed.type === "generation_started" && parsed.workflowRunId === body.workflowRunId;
+      } catch {
+        return false;
+      }
+    });
+    expect(ackMessage).toBeDefined();
+    expect(ackMessage?.userId).toBe(userId);
   });
 });
 

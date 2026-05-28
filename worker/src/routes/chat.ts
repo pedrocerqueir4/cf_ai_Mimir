@@ -134,10 +134,9 @@ chatRoutes.post("/message", sanitize, async (c) => {
   //
   // A quota error may throw synchronously at the await (most likely) or
   // mid-stream as a tee-side rejection. The try/catch below covers the
-  // synchronous case (primary surface). The waitUntil block already swallows
-  // mid-stream failures (L192-197) — mid-stream quota detection is intentionally
-  // out of scope for this task (the stream is already flowing to the client
-  // at that point and cannot be redirected to a system_warning event).
+  // synchronous case (primary surface). Mid-stream quota detection is
+  // intentionally out of scope — the stream is already flowing to the client
+  // at that point and cannot be redirected to a system_warning event.
   let aiStream: ReadableStream<Uint8Array>;
   try {
     aiStream = (await c.env.AI.run(
@@ -175,72 +174,81 @@ chatRoutes.post("/message", sanitize, async (c) => {
   // - If parsing an SSE chunk fails we fall back to accumulating raw text —
   //   this mirrors the frontend's own SSE reader behavior so the persisted
   //   content matches what the user saw.
+  // - executionCtx.waitUntil() is not available when the handler is invoked
+  //   via app.request() in tests (no real Workers ExecutionContext). The
+  //   try/catch degrades gracefully — persistence is skipped, clientStream
+  //   is unaffected. In production, executionCtx is always present.
   const [clientStream, persistStream] = aiStream.tee();
 
-  c.executionCtx.waitUntil(
-    (async () => {
-      try {
-        const reader = persistStream.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let assembled = "";
+  try {
+    c.executionCtx.waitUntil(
+      (async () => {
+        try {
+          const reader = persistStream.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let assembled = "";
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            const data = line.slice(6).trim();
-            if (data === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(data) as { response?: string; text?: string };
-              const token = parsed.response ?? parsed.text;
-              if (token) assembled += token;
-            } catch {
-              // Non-JSON chunk — treat as raw text (mirrors client reader fallback)
-              assembled += data;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              const data = line.slice(6).trim();
+              if (data === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(data) as { response?: string; text?: string };
+                const token = parsed.response ?? parsed.text;
+                if (token) assembled += token;
+              } catch {
+                // Non-JSON chunk — treat as raw text (mirrors client reader fallback)
+                assembled += data;
+              }
             }
           }
-        }
 
-        // Flush any trailing buffered fragment
-        if (buffer.startsWith("data: ")) {
-          const data = buffer.slice(6).trim();
-          if (data && data !== "[DONE]") {
-            try {
-              const parsed = JSON.parse(data) as { response?: string; text?: string };
-              const token = parsed.response ?? parsed.text;
-              if (token) assembled += token;
-            } catch {
-              assembled += data;
+          // Flush any trailing buffered fragment
+          if (buffer.startsWith("data: ")) {
+            const data = buffer.slice(6).trim();
+            if (data && data !== "[DONE]") {
+              try {
+                const parsed = JSON.parse(data) as { response?: string; text?: string };
+                const token = parsed.response ?? parsed.text;
+                if (token) assembled += token;
+              } catch {
+                assembled += data;
+              }
             }
           }
+
+          const trimmed = assembled.trim();
+          if (trimmed.length === 0) return;
+
+          await db.insert(schema.chatMessages).values({
+            id: crypto.randomUUID(),
+            userId,
+            conversationId,
+            role: "assistant",
+            content: trimmed,
+            // +2ms so it sorts strictly after both the user message (+0) and
+            // any roadmap ack (+1) that might share the same second.
+            createdAt: new Date(now.getTime() + 2),
+          });
+        } catch {
+          // Swallow — never let a persistence failure surface to the client
+          // since the stream itself already succeeded from the client's POV.
+          // The worst-case cost is one orphan user message without its reply;
+          // on the next reload the user still sees everything they saw live.
         }
-
-        const trimmed = assembled.trim();
-        if (trimmed.length === 0) return;
-
-        await db.insert(schema.chatMessages).values({
-          id: crypto.randomUUID(),
-          userId,
-          conversationId,
-          role: "assistant",
-          content: trimmed,
-          // +2ms so it sorts strictly after both the user message (+0) and
-          // any roadmap ack (+1) that might share the same second.
-          createdAt: new Date(now.getTime() + 2),
-        });
-      } catch {
-        // Swallow — never let a persistence failure surface to the client
-        // since the stream itself already succeeded from the client's POV.
-        // The worst-case cost is one orphan user message without its reply;
-        // on the next reload the user still sees everything they saw live.
-      }
-    })()
-  );
+      })()
+    );
+  } catch {
+    // executionCtx not available (test environment via app.request()).
+    // Persistence is skipped; clientStream is unaffected.
+  }
 
   return new Response(clientStream, {
     headers: {

@@ -653,15 +653,17 @@ export default function ChatPage() {
             if (line.startsWith("data: ")) {
               const data = line.slice(6).trim();
 
-              // system_warning: replace typing indicator with an amber bubble,
-              // then break out of the read loop (server closes stream right after).
+              // system_warning: replace the empty AI bubble (typingId was
+              // already swapped for aiMsgId at L620) with an amber system
+              // bubble, then break out of the read loop (server closes stream
+              // right after).
               if (currentEvent === "system_warning") {
                 try {
                   const parsed = JSON.parse(data) as { message?: string };
                   if (parsed.message) {
                     setMessages((prev) =>
                       prev.map((m) =>
-                        m.id === typingId
+                        m.id === aiMsgId
                           ? {
                               id: randomId(),
                               role: "system" as MessageRole,
