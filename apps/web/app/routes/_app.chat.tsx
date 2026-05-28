@@ -789,7 +789,7 @@ export default function ChatPage() {
   const isSendDisabled = !input.trim() || isStreaming;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-1 flex-col">
       {/* Message list — extra bottom padding clears the fixed composer
           so the last message is never hidden behind it. Mobile clearance:
           composer (~h-12 input + py-3 + border + safe-area) ≈ 96px; on top

@@ -165,7 +165,7 @@ export default function LessonPage() {
   return (
     <div className="pb-24 lg:pb-6">
       {/* Top frosted bar — sticks just below the AppShell status bar (h-14). */}
-      <header className="sticky top-14 z-30 flex items-center gap-3 border-b border-[hsl(var(--border))] bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card px-4 py-3">
+      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-[hsl(var(--border))] bg-[var(--bg-frosted)] backdrop-blur-md supports-[not_(backdrop-filter:blur(16px))]:bg-card px-4 py-3">
         <Link
           to={`/roadmaps/${roadmapId}`}
           aria-label="Back to roadmap"
