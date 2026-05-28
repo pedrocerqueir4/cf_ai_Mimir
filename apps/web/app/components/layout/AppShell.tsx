@@ -24,8 +24,11 @@ export function AppShell({ children, immersive = false }: AppShellProps) {
     // min-h-dvh instead of min-h-screen: dvh tracks the actual dynamic
     // viewport (shrinks when the mobile URL bar is visible), preventing the
     // 100vh trap where min-height exceeds the visible area on iOS/Android.
+    // h-dvh + overflow-y-auto: the document is locked (html/body overflow:hidden
+    // in app.css), so an immersive route taller than the viewport scrolls HERE,
+    // not on the document. Full-viewport battle screens fit and won't scroll.
     return (
-      <div className="min-h-dvh bg-background">
+      <div className="h-dvh overflow-y-auto bg-background">
         {children}
       </div>
     );

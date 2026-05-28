@@ -11,21 +11,26 @@
 @import "tailwindcss" source(".");
 
 /*
- * Prevent document-level overscroll / rubber-band bounce on mobile.
+ * Lock the document to the viewport so it can NEVER scroll — the app uses an
+ * "app shell" scroll model where the only scroll container is AppShell's <main>
+ * (overflow-y-auto), NOT the document/body. The shell itself is h-dvh
+ * overflow-hidden, but a route whose content leaks past the shell (e.g. the
+ * lesson reader's sticky header + fixed action bar) could still hand a scroll to
+ * the document. Hard-locking html+body height to the dynamic viewport with
+ * overflow:hidden removes that escape hatch app-wide: there is no document
+ * scrollbar to give away, so over-scroll / rubber-band / "bar slides up" is
+ * structurally impossible. Inner scroll containers (main, ScrollArea,
+ * overflow-y-auto divs) are unaffected — they own all scrolling.
  *
- * Without this, iOS Safari and Chrome for Android allow the user to pull the
- * page beyond its content boundary — producing the "content and bar scroll
- * up into empty space" symptom reported in the lesson reader. Setting
- * overscroll-behavior-y: none on html + body disables that elastic bounce
- * at the document level while leaving inner scroll containers (ScrollArea,
- * overflow-y-auto divs) unaffected — they inherit the default "auto".
- *
- * This is safe across all routes: the chat route uses an inner ScrollArea
- * (not document scroll) so it is unaffected. Battle routes are immersive and
- * also do not rely on document overscroll bounce for any UX affordance.
+ * overscroll-behavior-y: none additionally kills elastic bounce on the inner
+ * containers' edges. Immersive battle routes (min-h-dvh) are full-viewport by
+ * design and now scroll internally (AppShell immersive branch = overflow-y-auto)
+ * rather than relying on the document.
  */
 html,
 body {
+  height: 100dvh;
+  overflow: hidden;
   overscroll-behavior-y: none;
 }
 
