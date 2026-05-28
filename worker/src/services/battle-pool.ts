@@ -292,6 +292,11 @@ export async function findOrQueueTopic(
   const normalized = normalizeTopic(rawTopic);
   assertTopicSafe(normalized);
 
+  // [battle-topic] Log input vs normalized so any mismatch is visible.
+  console.log(
+    `[battle-topic] findOrQueueTopic rawTopic="${rawTopic}" normalized="${normalized}"`
+  );
+
   // Embed topic.
   const topicEmbedding = await embedTopic(env, normalized);
 
@@ -315,6 +320,13 @@ export async function findOrQueueTopic(
 
   const match = queryResult.matches?.[0];
 
+  // [battle-topic] Log vectorize result so hit/miss is traceable.
+  console.log(
+    `[battle-topic] VECTORIZE_RESULT normalized="${normalized}"` +
+    ` matchScore=${match?.score ?? "none"} threshold=${POOL_SIMILARITY_THRESHOLD}` +
+    ` isHit=${!!(match && match.score > POOL_SIMILARITY_THRESHOLD)}`
+  );
+
   if (match && match.score > POOL_SIMILARITY_THRESHOLD) {
     // HIT path — look up existing pool topic + its questions.
     const existingId =
@@ -334,6 +346,10 @@ export async function findOrQueueTopic(
         count,
         reserveCount,
         options.seed ?? existingId,
+      );
+      console.log(
+        `[battle-topic] HIT normalized="${normalized}" poolTopicId="${existingId}"` +
+        ` questions=${sampled.questions.length}`
       );
       return {
         status: "hit",
@@ -432,6 +448,10 @@ export async function findOrQueueTopic(
     // (already persisted in battle_pool_topics.workflow_run_id by the
     // INSERT above), NOT canonicalId. See debug session
     // `battle-pool-requeue-silent` for the collision that motivated this.
+    console.log(
+      `[battle-topic] MISS_WINNER normalized="${normalized}" poolTopicId="${canonicalId}"` +
+      ` workflowRunId="${workflowRunId}" — scheduling workflow`
+    );
     await env.BATTLE_QUESTION_WORKFLOW.create({
       id: workflowRunId,
       params: {
@@ -463,6 +483,10 @@ export async function findOrQueueTopic(
         count,
         reserveCount,
         options.seed ?? canonicalId,
+      );
+      console.log(
+        `[battle-topic] MISS_LOSER_READY_HIT normalized="${normalized}" poolTopicId="${canonicalId}"` +
+        ` questions=${sampled.questions.length}`
       );
       return {
         status: "hit",
@@ -546,6 +570,10 @@ export async function findOrQueueTopic(
       // fresh runId (NOT canonicalId) as the Workflows instance id to
       // avoid the terminal-state collision that made the previous run
       // silently no-op in miniflare.
+      console.log(
+        `[battle-topic] GRAVESTONE_REQUEUE normalized="${normalized}" poolTopicId="${canonicalId}"` +
+        ` reQueueRunId="${reQueueRunId}" canonicalStatus="${canonicalStatus}"`
+      );
       await env.BATTLE_QUESTION_WORKFLOW.create({
         id: reQueueRunId,
         params: {
@@ -590,6 +618,9 @@ export async function findOrQueueTopic(
         // fall through to generating
       }
     }
+    console.log(
+      `[battle-topic] GRAVESTONE_CAS_LOST normalized="${normalized}" poolTopicId="${canonicalId}" — returning generating`
+    );
     return {
       status: "generating",
       poolTopicId: canonicalId,
@@ -600,6 +631,9 @@ export async function findOrQueueTopic(
   // (c) actively-generating — someone else's workflow is in flight. Don't
   // schedule a duplicate. Preserves T-04-10 race-dedup contract exercised
   // by tests/battle/battle.pool.race.test.ts.
+  console.log(
+    `[battle-topic] LOSER_GENERATING normalized="${normalized}" poolTopicId="${canonicalId}" — workflow in flight`
+  );
   return {
     status: "generating",
     poolTopicId: canonicalId,

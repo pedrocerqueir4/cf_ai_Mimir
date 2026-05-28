@@ -467,6 +467,13 @@ export interface BattleLobbyState {
   questionCount: 5 | 10 | 15;
   winningRoadmapId: string | null;
   winningTopic: string | null;
+  /**
+   * AI-generated human-readable title of the winning roadmap (e.g. "React
+   * Fundamentals: A Complete Guide"). Prefer this over winningTopic for
+   * display. Falls back to winningTopic on the server when no roadmap exists
+   * (preset-topic guest path where winningRoadmapId is null).
+   */
+  winningRoadmapTitle: string | null;
   poolStatus: PoolStatus | null;
   createdAt: number;
   expiresAt: number | null;

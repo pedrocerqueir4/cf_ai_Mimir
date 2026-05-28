@@ -507,8 +507,12 @@ function BattlePreInner({
       lobby.hostRoadmapTitle ?? lobby.winningTopic ?? "Host topic";
     const guestTopic =
       lobby.guestRoadmapTitle ?? lobby.winningTopic ?? "Guest topic";
+    // winningRoadmapTitle is the AI-generated roadmap title (e.g. "React
+    // Fundamentals: A Complete Guide") surfaced by the server. winningTopic
+    // is the raw extracted user prompt (e.g. "react fundamentals") — a
+    // poor display choice. Prefer winningRoadmapTitle for the winner reveal.
     const winningTopic =
-      lobby.winningTopic ?? lobby.hostRoadmapTitle ?? hostTopic;
+      lobby.winningRoadmapTitle ?? lobby.winningTopic ?? lobby.hostRoadmapTitle ?? hostTopic;
     return {
       hostTopic,
       guestTopic,

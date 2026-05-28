@@ -437,6 +437,14 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
     typedGuestRoadmap ?? { id: null, topic: presetTopicSafe! };
   const winningRoadmap = winnerIsHost ? hostRoadmapRow : guestSideRoadmap;
 
+  // [battle-topic] Instrumentation: log the coin-flip decision and topic selection
+  // so the winning topic can be traced in wrangler/dev console.
+  console.log(
+    `[battle-topic] JOIN battleId="${battle.id}" winnerIsHost=${winnerIsHost}` +
+    ` hostTopic="${hostRoadmapRow.topic}" guestTopic="${presetTopicSafe ?? typedGuestRoadmap?.topic ?? "n/a"}"` +
+    ` winningTopic="${winningRoadmap.topic}" winningRoadmapId="${winningRoadmap.id ?? "null (preset)"}"`
+  );
+
   // ─── Pool lookup FIRST (gap 04-09) ───────────────────────────────────
   // Runs BEFORE any D1 mutation and BEFORE DO attachGuest. If the Workers
   // AI embedding or Vectorize call throws (e.g., InferenceUpstreamError
@@ -460,6 +468,12 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
       503,
     );
   }
+
+  // [battle-topic] Log the pool lookup outcome so pool hits vs misses are visible.
+  console.log(
+    `[battle-topic] POOL_LOOKUP battleId="${battle.id}" topic="${winningRoadmap.topic}"` +
+    ` status="${lookup.status}" poolTopicId="${lookup.poolTopicId}"`
+  );
 
   // ─── Single atomic D1 mutation (pool lookup succeeded) ───────────────
   // Collapses the previous two-step UPDATE (guest/status THEN poolTopicId)
@@ -521,6 +535,11 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
           }),
         }),
       );
+      // [battle-topic] Log questions loaded into DO at join time (hit path).
+      console.log(
+        `[battle-topic] SET_QUESTIONS_AT_JOIN battleId="${battle.id}"` +
+        ` poolTopicId="${lookup.poolTopicId}" count=${lookup.questions.length}`
+      );
     } catch (err) {
       console.error("[battle join] DO setQuestions failed:", String(err));
     }
@@ -535,7 +554,12 @@ battleRoutes.post("/join", sanitize, battleJoinRateLimit, async (c) => {
   }
 
   // MISS or GENERATING — client polls battles row until poolStatus flips
-  // to 'ready', then issues startBattle.
+  // to 'ready', then issues startBattle. Questions will be loaded into the
+  // DO at POST /start time (after the pool workflow completes).
+  console.log(
+    `[battle-topic] POOL_MISS_OR_GENERATING battleId="${battle.id}"` +
+    ` poolTopicId="${lookup.poolTopicId}" — questions will be loaded at /start`
+  );
   return c.json(
     {
       status: "generating" as const,
@@ -688,11 +712,67 @@ battleRoutes.post("/:id/start", async (c) => {
     })
     .where(eq(schema.battles.id, battleId));
 
+  // ─── Ensure questions are loaded in the DO before starting ───────────
+  //
+  // When findOrQueueTopic returned 'miss' or 'generating' at join time, the
+  // DO's config.questions was left empty []. The workflow has since stored
+  // questions in D1 and flipped poolStatus='ready' (which is what gated the
+  // frontend from reaching this /start call). We must sample from D1 and push
+  // via opSetQuestions NOW so opStartBattle sees a non-empty question list.
+  //
+  // This also acts as a safety net for the 'hit' path: if the opSetQuestions
+  // call during join failed (non-fatal, error was logged), we re-push here.
+  //
+  // [battle-topic] Log the question-loading state so this path is visible.
+  if (battle.poolTopicId) {
+    try {
+      const sampled = await sampleQuestions(
+        c.env,
+        battle.poolTopicId,
+        battle.questionCount as 5 | 10 | 15,
+        5,
+        battle.id,
+      );
+      const doId = c.env.BATTLE_ROOM.idFromName(battleId);
+      const doStub = c.env.BATTLE_ROOM.get(doId);
+      await doStub.fetch(
+        new Request("https://do/setQuestions", {
+          method: "POST",
+          headers: {
+            "X-Battle-Op": "setQuestions",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            questions: sampled.questions,
+            reservedQuestions: sampled.reservedQuestions,
+          }),
+        }),
+      );
+      console.log(
+        `[battle-topic] SET_QUESTIONS_AT_START battleId="${battleId}"` +
+        ` poolTopicId="${battle.poolTopicId}" count=${sampled.questions.length}`
+      );
+    } catch (err) {
+      // sampleQuestions throws if the pool doesn't have enough rows yet.
+      // opStartBattle will then return 409 "no questions loaded" — surfaced
+      // to the frontend as an error. Log here so the failure is traceable.
+      console.error(
+        `[battle-topic] SET_QUESTIONS_AT_START FAILED battleId="${battleId}"` +
+        ` poolTopicId="${battle.poolTopicId}"`,
+        String(err),
+      );
+    }
+  } else {
+    console.warn(
+      `[battle-topic] START with no poolTopicId battleId="${battleId}" — opStartBattle will 409`
+    );
+  }
+
   // Forward to the DO — startBattle transitions phase + broadcasts Q0.
   try {
     const id = c.env.BATTLE_ROOM.idFromName(battleId);
     const stub = c.env.BATTLE_ROOM.get(id);
-    await stub.fetch(
+    const doRes = await stub.fetch(
       new Request("https://do/startBattle", {
         method: "POST",
         headers: {
@@ -702,6 +782,13 @@ battleRoutes.post("/:id/start", async (c) => {
         body: JSON.stringify({ wagerAmount: pot }),
       }),
     );
+    // [battle-topic] Log the DO response so 409 "no questions loaded" is visible.
+    if (!doRes.ok) {
+      const doBody = await doRes.text();
+      console.error(
+        `[battle-topic] DO startBattle failed status=${doRes.status} body="${doBody}" battleId="${battleId}"`
+      );
+    }
   } catch (err) {
     console.error("[battle start] DO startBattle failed:", String(err));
   }
@@ -930,7 +1017,10 @@ battleRoutes.get("/:id", async (c) => {
     }),
   );
 
-  // Fetch roadmap titles.
+  // Fetch roadmap titles. winningRoadmapId is always either hostRoadmapId or
+  // guestRoadmapId (or null for the preset-guest path), so it is already
+  // covered by the existing IN(host, guest) query. roadmapMap is keyed by
+  // roadmap id → roadmaps.title (the AI-generated human-readable title).
   const roadmapIds = [battle.hostRoadmapId];
   if (battle.guestRoadmapId) roadmapIds.push(battle.guestRoadmapId);
   const roadmapRows = await db
@@ -970,6 +1060,19 @@ battleRoutes.get("/:id", async (c) => {
   const hostInfo = userMap.get(battle.hostId);
   const guestInfo = battle.guestId ? userMap.get(battle.guestId) : undefined;
 
+  // winningRoadmapTitle: the AI-generated roadmap title for the winning side.
+  // Prefer the title from roadmapMap (which uses roadmaps.title, the
+  // human-readable AI title) over winningTopic (which is roadmaps.topic,
+  // the raw extracted user prompt). Falls back to winningTopic so the field
+  // is always non-null when a winner exists.
+  let winningRoadmapTitle: string | null = battle.winningTopic ?? null;
+  if (battle.winningRoadmapId) {
+    const fromMap = roadmapMap.get(battle.winningRoadmapId);
+    if (fromMap !== undefined) {
+      winningRoadmapTitle = fromMap;
+    }
+  }
+
   return c.json({
     battleId: battle.id,
     joinCode: battle.joinCode,
@@ -994,6 +1097,7 @@ battleRoutes.get("/:id", async (c) => {
     questionCount: battle.questionCount,
     winningRoadmapId: battle.winningRoadmapId,
     winningTopic: battle.winningTopic,
+    winningRoadmapTitle,
     poolStatus,
     createdAt: createdAtMs,
     expiresAt,

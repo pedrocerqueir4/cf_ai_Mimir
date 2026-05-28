@@ -60,6 +60,7 @@ function basePrev(overrides: Partial<BattleLobbyState> = {}): BattleLobbyState {
 		questionCount: 5,
 		winningRoadmapId: null,
 		winningTopic: "Cells 101",
+		winningRoadmapTitle: null,
 		poolStatus: "generating",
 		createdAt: 1_700_000_000_000,
 		expiresAt: null,
