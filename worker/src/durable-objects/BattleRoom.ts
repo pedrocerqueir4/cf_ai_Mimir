@@ -53,6 +53,10 @@ const DISCONNECT_GRACE_MS = 30 * 1000; // D-25: 30s reconnect grace
 const POOL_TIMEOUT_MS = 60 * 1000;
 const CLOSE_CODE_MOVED = 4001;
 const CLOSE_CODE_INVALID = 4002;
+// Reveal phase duration: clients animate correct/wrong, then a Next button
+// allows both players to skip the remaining time. If the alarm fires first
+// (neither or only one sent request_next), completeRevealAndAdvance runs.
+export const REVEAL_DURATION_MS = 3000;
 
 // ─── Persistent state types (exported for test harness) ──────────────────────
 
@@ -60,7 +64,9 @@ export type BattlePhase =
   | "lobby"
   | "pre-battle"
   | "active"
+  | "reveal"          // 3s post-question reveal window (regular round)
   | "tiebreak"
+  | "tiebreak-reveal" // 3s post-question reveal window (tiebreak round)
   | "opponent-reconnecting" // D-25: one player disconnected, grace window active
   | "ended"
   | "expired"
@@ -113,6 +119,8 @@ export interface BattleRuntime {
   consecutiveMiss: Record<string, number>;
   tiebreakerRound: number; // 0 during regular; 1+ during sudden-death
   endBroadcasted?: boolean;
+  // Reveal-phase fields — populated by startReveal(), cleared on next question.
+  playersRequestedNext?: Record<string, boolean>;
 }
 
 export interface SocketAttachment {
@@ -348,6 +356,12 @@ export class BattleRoom extends DurableObject<Env> {
       return;
     }
 
+    // ── request_next — early reveal advance ──────────────────────────
+    if (msg.action === "request_next") {
+      await this.handleRequestNext(att.userId);
+      return;
+    }
+
     // msg.action === "answer"
     const runtime = await this.ctx.storage.get<BattleRuntime>("runtime");
     const config = await this.ctx.storage.get<BattleConfig>("config");
@@ -394,7 +408,7 @@ export class BattleRoom extends DurableObject<Env> {
     });
 
     if (this.bothAnswered(runtime, config)) {
-      await this.advanceQuestion();
+      await this.startReveal();
     }
   }
 
@@ -425,7 +439,14 @@ export class BattleRoom extends DurableObject<Env> {
 
     // Only start grace on an in-flight battle. Lobby/pre-battle/ended/forfeited
     // are intentionally NOT guarded — they have their own timeout paths.
-    if (runtime.phase !== "active" && runtime.phase !== "tiebreak") return;
+    // Reveal phases count as in-flight — a disconnect during reveal still
+    // deserves the 30s grace window.
+    if (
+      runtime.phase !== "active" &&
+      runtime.phase !== "tiebreak" &&
+      runtime.phase !== "reveal" &&
+      runtime.phase !== "tiebreak-reveal"
+    ) return;
 
     // D-27 nuance: the user might have another live tab for THIS battle.
     // ctx.getWebSockets(userId) returns sockets tagged with userId —
@@ -446,22 +467,29 @@ export class BattleRoom extends DurableObject<Env> {
     // D-25 timer pause: capture the remaining question time so we can
     // resume EXACTLY where we left off on reconnect. If no question is
     // active, remaining = 0 (harmless fallthrough).
-    const pausedQuestionRemainingMs = runtime.questionStartedAtMs
-      ? Math.max(
-          0,
-          runtime.questionStartedAtMs + BATTLE_TIME_LIMIT_MS - nowMs,
-        )
-      : 0;
+    // During reveal, pausedQuestionRemainingMs = 0 (the alarm is the reveal
+    // alarm, not a question timer — reconnect resumes from reveal phase).
+    const isRevealPhase = runtime.phase === "reveal" || runtime.phase === "tiebreak-reveal";
+    const pausedQuestionRemainingMs = isRevealPhase
+      ? 0
+      : runtime.questionStartedAtMs
+        ? Math.max(
+            0,
+            runtime.questionStartedAtMs + BATTLE_TIME_LIMIT_MS - nowMs,
+          )
+        : 0;
 
     const disconnectRecord: DisconnectRecord = {
       userId: att.userId,
       disconnectedAtMs: nowMs,
       pausedQuestionRemainingMs,
-      preDisconnectPhase: runtime.phase,
+      preDisconnectPhase: isRevealPhase
+        ? (runtime.phase === "tiebreak-reveal" ? "tiebreak" : "active")
+        : (runtime.phase as "active" | "tiebreak"),
     };
     await this.ctx.storage.put("disconnect", disconnectRecord);
 
-    // Cancel the in-flight question alarm so the timer doesn't fire
+    // Cancel the in-flight question/reveal alarm so the timer doesn't fire
     // during the grace window.
     try {
       await this.ctx.storage.deleteAlarm();
@@ -522,10 +550,16 @@ export class BattleRoom extends DurableObject<Env> {
         await this.expireLobby();
         return;
       case "active":
-        await this.advanceQuestion();
+        await this.startReveal();
         return;
       case "tiebreak":
-        await this.advanceQuestion();
+        await this.startReveal();
+        return;
+      case "reveal":
+        await this.completeRevealAndAdvance();
+        return;
+      case "tiebreak-reveal":
+        await this.completeRevealAndAdvance();
         return;
       case "ended":
       case "forfeited":
@@ -586,6 +620,8 @@ export class BattleRoom extends DurableObject<Env> {
     runtime.currentQuestionIndex = idx;
     runtime.questionStartedAtMs = now;
     runtime.answered[idx] ??= {};
+    // Clear reveal-phase bookkeeping for the new round.
+    runtime.playersRequestedNext = undefined;
 
     await this.ctx.storage.put("runtime", runtime);
     await this.ctx.storage.setAlarm(now + BATTLE_TIME_LIMIT_MS);
@@ -609,7 +645,22 @@ export class BattleRoom extends DurableObject<Env> {
     });
   }
 
-  private async advanceQuestion(): Promise<void> {
+  /**
+   * startReveal — Phase 1 of the post-question flow.
+   *
+   * Called either:
+   *   - from webSocketMessage when bothAnswered(), OR
+   *   - from alarm() when the 15s per-question timer expires.
+   *
+   * Fills missing answers, broadcasts the reveal event (with correctOptionId),
+   * transitions phase → reveal / tiebreak-reveal, and schedules the 3s
+   * REVEAL_DURATION_MS alarm. The alarm handler calls completeRevealAndAdvance.
+   *
+   * If both players later send `request_next` before the alarm fires,
+   * handleRequestNext cancels the alarm and calls completeRevealAndAdvance
+   * immediately.
+   */
+  private async startReveal(): Promise<void> {
     // Cancel any pending alarm so a late-firing timer can't double-advance.
     try {
       await this.ctx.storage.deleteAlarm();
@@ -627,9 +678,55 @@ export class BattleRoom extends DurableObject<Env> {
     // and increment consecutiveMiss for those users.
     this.fillMissingAnswersAsNoAnswer(runtime, config);
 
-    // Broadcast reveal for this question — includes correctOptionId (allowed
-    // only now, AFTER both answers locked in).
+    const preRevealPhase = runtime.phase; // "active" | "tiebreak"
+
+    // Transition to the reveal phase.
+    runtime.phase = preRevealPhase === "tiebreak" ? "tiebreak-reveal" : "reveal";
+    runtime.playersRequestedNext = {};
+
+    await this.ctx.storage.put("runtime", runtime);
+
+    // Schedule the 3s reveal alarm. completeRevealAndAdvance runs on expiry
+    // (or is invoked earlier if both players send request_next).
+    const now = Date.now();
+    await this.ctx.storage.setAlarm(now + REVEAL_DURATION_MS);
+
+    // Broadcast reveal — correctOptionId allowed only now (AFTER answers locked in).
     this.broadcastReveal(runtime, config);
+  }
+
+  /**
+   * completeRevealAndAdvance — Phase 2 of the post-question flow.
+   *
+   * Runs at reveal alarm expiry OR when both players send request_next.
+   * Performs all the post-question logic that advanceQuestion used to do:
+   * forfeit check, next question, tiebreak entry, battle end.
+   *
+   * Idempotency: guarded by a phase check — only runs during reveal phases.
+   * The alarm-vs-request_next race is safe: whichever path fires first
+   * transitions phase away from reveal, so the second path is a no-op.
+   */
+  private async completeRevealAndAdvance(): Promise<void> {
+    const runtime = await this.ctx.storage.get<BattleRuntime>("runtime");
+    const config = await this.ctx.storage.get<BattleConfig>("config");
+    if (!runtime || !config) return;
+
+    // Guard: only act during reveal phases (idempotency against double-fire).
+    if (runtime.phase !== "reveal" && runtime.phase !== "tiebreak-reveal") return;
+
+    const wasInTiebreak = runtime.phase === "tiebreak-reveal";
+
+    // Cancel any pending reveal alarm (in case we were called from
+    // handleRequestNext before the alarm fired).
+    try {
+      await this.ctx.storage.deleteAlarm();
+    } catch {
+      /* ignore */
+    }
+
+    // Restore the pre-reveal phase so the rest of the logic branches correctly.
+    runtime.phase = wasInTiebreak ? "tiebreak" : "active";
+    await this.ctx.storage.put("runtime", runtime);
 
     // Idle-forfeit check — filled in fully by Task 1b.
     const forfeitUserId = this.pickForfeitUser(runtime, config);
@@ -643,11 +740,9 @@ export class BattleRoom extends DurableObject<Env> {
       return;
     }
 
-    await this.ctx.storage.put("runtime", runtime);
-
-    // Regular phase: advance within question list; if exhausted, either end
-    // or enter tiebreak on a score tie.
-    if (runtime.phase === "active") {
+    if (!wasInTiebreak) {
+      // Regular phase: advance within question list; if exhausted, either end
+      // or enter tiebreak on a score tie.
       const nextIdx = runtime.currentQuestionIndex + 1;
       if (nextIdx < config.questions.length) {
         await this.startQuestion(nextIdx);
@@ -672,8 +767,48 @@ export class BattleRoom extends DurableObject<Env> {
       return;
     }
 
-    // runtime.phase === "tiebreak"
+    // runtime.phase === "tiebreak" (was "tiebreak-reveal")
     await this.resolveTiebreakRound(runtime, config);
+  }
+
+  /**
+   * handleRequestNext — processes a client's "skip reveal" request.
+   *
+   * Only valid during reveal / tiebreak-reveal phases. Marks the sender as
+   * ready. If both players are ready, cancels the reveal alarm and calls
+   * completeRevealAndAdvance immediately.
+   *
+   * Idempotent: duplicate requests from the same player are no-ops.
+   * One-player-only: if only one player sends request_next, the 3s alarm
+   * still controls the advance (we do NOT skip for a single player).
+   */
+  private async handleRequestNext(userId: string): Promise<void> {
+    const runtime = await this.ctx.storage.get<BattleRuntime>("runtime");
+    const config = await this.ctx.storage.get<BattleConfig>("config");
+    if (!runtime || !config) return;
+
+    if (runtime.phase !== "reveal" && runtime.phase !== "tiebreak-reveal") return;
+
+    // Initialise if missing (e.g. after a DO hibernate/restore).
+    if (!runtime.playersRequestedNext) {
+      runtime.playersRequestedNext = {};
+    }
+
+    // Idempotent: already marked ready.
+    if (runtime.playersRequestedNext[userId]) return;
+
+    runtime.playersRequestedNext[userId] = true;
+    await this.ctx.storage.put("runtime", runtime);
+
+    // Check if BOTH players are ready.
+    const hostReady = !!runtime.playersRequestedNext[config.hostId];
+    const guestReady = config.guestId
+      ? !!runtime.playersRequestedNext[config.guestId]
+      : true; // Solo mode: host alone is sufficient (shouldn't happen in 2P battles).
+
+    if (hostReady && guestReady) {
+      await this.completeRevealAndAdvance();
+    }
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -731,10 +866,12 @@ export class BattleRoom extends DurableObject<Env> {
     config: BattleConfig,
   ): void {
     const idx = runtime.currentQuestionIndex;
-    const q =
-      runtime.phase === "tiebreak"
-        ? config.reservedQuestions[runtime.tiebreakerRound - 1]
-        : config.questions[idx];
+    // During reveal phase, the stored phase is "reveal" / "tiebreak-reveal",
+    // so we determine which question pool to look up from the phase.
+    const isTiebreak = runtime.phase === "tiebreak-reveal" || runtime.phase === "tiebreak";
+    const q = isTiebreak
+      ? config.reservedQuestions[runtime.tiebreakerRound - 1]
+      : config.questions[idx];
     if (!q) return;
 
     const hostAns = runtime.answered[idx]?.[config.hostId];
@@ -751,6 +888,7 @@ export class BattleRoom extends DurableObject<Env> {
       opponentCorrect: guestAns?.correct ?? false,
       yourPoints: hostAns?.points ?? 0,
       opponentPoints: guestAns?.points ?? 0,
+      revealDurationMs: REVEAL_DURATION_MS,
     });
   }
 
@@ -760,7 +898,7 @@ export class BattleRoom extends DurableObject<Env> {
   ): Promise<void> {
     // D-15: sudden-death tiebreaker. Pulls reservedQuestions[round-1] and
     // broadcasts it via startQuestion. resolveTiebreakRound (called from
-    // advanceQuestion when runtime.phase === "tiebreak") decides the
+    // completeRevealAndAdvance when runtime.phase === "tiebreak") decides the
     // winner per D-15 rules: first correct wins, ties on correctness
     // break on points, then pull another reserve if still tied.
     if (config.reservedQuestions.length === 0) {
@@ -1056,10 +1194,10 @@ export class BattleRoom extends DurableObject<Env> {
     config: BattleConfig,
   ): Promise<void> {
     // Writes the per-question answer rows for the regular round to
-    // `battle_answers`. Called from advanceQuestion after regular pool
-    // exhaustion / tiebreak resolution. Tiebreaker questions persist only
-    // if they're in the battle_quiz_pool (which they are — reserved pool is
-    // sampled from the same topic pool).
+    // `battle_answers`. Called from completeRevealAndAdvance after regular
+    // pool exhaustion / tiebreak resolution. Tiebreaker questions persist
+    // only if they're in the battle_quiz_pool (which they are — reserved
+    // pool is sampled from the same topic pool).
     try {
       const db = drizzle(this.env.DB, { schema });
       const rows: Array<{

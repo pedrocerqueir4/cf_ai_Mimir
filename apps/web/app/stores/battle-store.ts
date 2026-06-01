@@ -27,7 +27,9 @@ export type OpponentConnectionState =
 export type BattlePhase =
   | "connecting"
   | "active"
+  | "reveal"           // 3s post-question reveal window (regular round)
   | "tiebreak"
+  | "tiebreak-reveal"  // 3s post-question reveal window (tiebreak round)
   | "ended"
   | "reconnecting"
   | "opponent-reconnecting"
@@ -98,6 +100,12 @@ export interface BattleState {
   lastAnswerByIdx: Record<number, Record<string, PerUserAnswerRecord>>;
   /** The correct option id for the CURRENT visible question after reveal. */
   revealCorrectOptionId: string | null;
+  /** Duration the server-side reveal phase lasts (ms). Used for the countdown ring. */
+  revealDurationMs: number | null;
+  /** When the reveal phase started on the client (Date.now()). */
+  revealStartedAtMs: number | null;
+  /** True if this client has already sent request_next for the current reveal. */
+  myRequestedNext: boolean;
 
   // Local selection state (client-only; never sent to server as score).
   mySelectedOptionId: string | null;
@@ -136,6 +144,7 @@ export interface BattleState {
 
   // UI-driven setters
   setMySelectedOption: (optionId: string) => void;
+  setMyRequestedNext: () => void;
   tickTimer: () => void;
 }
 
@@ -163,6 +172,9 @@ const initialState = {
   scores: {},
   lastAnswerByIdx: {},
   revealCorrectOptionId: null,
+  revealDurationMs: null,
+  revealStartedAtMs: null,
+  myRequestedNext: false,
 
   mySelectedOptionId: null,
   myAnswerLocked: false,
@@ -263,6 +275,9 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       mySelectedOptionId: null,
       myAnswerLocked: false,
       revealCorrectOptionId: null,
+      revealDurationMs: null,
+      revealStartedAtMs: null,
+      myRequestedNext: false,
       phase: "active",
     }),
 
@@ -276,10 +291,20 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   },
 
   applyReveal: (evt) => {
-    const { hostId, guestId, lastAnswerByIdx } = get();
+    const { hostId, guestId, lastAnswerByIdx, phase } = get();
     const perUser = perUserFromReveal(evt, hostId, guestId);
+    // Determine which reveal phase we're entering. Tiebreak phases remain
+    // in tiebreak-reveal; regular battles enter reveal.
+    const nextPhase: BattlePhase =
+      phase === "tiebreak" || phase === "tiebreak-reveal"
+        ? "tiebreak-reveal"
+        : "reveal";
     set({
       revealCorrectOptionId: evt.correctOptionId,
+      revealDurationMs: evt.revealDurationMs,
+      revealStartedAtMs: Date.now(),
+      myRequestedNext: false,
+      phase: nextPhase,
       lastAnswerByIdx: {
         ...lastAnswerByIdx,
         [evt.questionIndex]: perUser,
@@ -374,12 +399,15 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       myAnswerLocked: true,
     }),
 
+  setMyRequestedNext: () =>
+    set({ myRequestedNext: true }),
+
   tickTimer: () => {
     const { questionStartedAtMs, currentQuestion, phase, revealCorrectOptionId } = get();
     if (!questionStartedAtMs || !currentQuestion) return;
     if (phase !== "active" && phase !== "tiebreak") return;
     // WR-05: once the server emits `reveal`, it has already moved on to
-    // the next question. Freeze the displayed countdown so the old
+    // the reveal phase. Freeze the displayed countdown so the old
     // questionStartedAtMs doesn't drift to 0 during the sub-ms gap
     // before the next `question` event re-seeds the timer.
     if (revealCorrectOptionId != null) return;

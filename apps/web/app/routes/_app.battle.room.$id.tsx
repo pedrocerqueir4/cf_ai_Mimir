@@ -101,6 +101,7 @@ function BattleRoomInner({ battleId }: { battleId: string }) {
   const mySelectedOptionId = useBattleStore((s) => s.mySelectedOptionId);
   const myAnswerLocked = useBattleStore((s) => s.myAnswerLocked);
   const revealCorrectOptionId = useBattleStore((s) => s.revealCorrectOptionId);
+  const myRequestedNext = useBattleStore((s) => s.myRequestedNext);
   const timeRemainingMs = useBattleStore((s) => s.timeRemainingMs);
   const opponentName = useBattleStore((s) => s.opponentName);
   const hostId = useBattleStore((s) => s.hostId);
@@ -143,6 +144,9 @@ function BattleRoomInner({ battleId }: { battleId: string }) {
     return null;
   }, [myUserId, hostId, guestId]);
   const opponentScore = opponentId ? scores[opponentId] ?? 0 : 0;
+
+  // Whether we're currently in a reveal phase (regular or tiebreak).
+  const isRevealPhase = phase === "reveal" || phase === "tiebreak-reveal";
 
   // ── Error / terminal renders ──────────────────────────────────────────
   if (lobbyError) {
@@ -234,11 +238,31 @@ function BattleRoomInner({ battleId }: { battleId: string }) {
         ) : (
           <Card className="p-4 text-[14px] leading-[1.5] text-[hsl(var(--fg-muted))]">
             {status === "connecting"
-              ? "Connecting\u2026"
-              : "Waiting for the first question\u2026"}
+              ? "Connecting…"
+              : "Waiting for the first question…"}
           </Card>
         )}
         </div>
+
+        {/* Next button — only shown during reveal phase */}
+        {isRevealPhase && (
+          <div className="px-4">
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={myRequestedNext}
+              onClick={() => {
+                if (myRequestedNext) return;
+                useBattleStore.getState().setMyRequestedNext();
+                send({ action: "request_next" });
+              }}
+            >
+              {myRequestedNext
+                ? "Waiting for opponent…"
+                : "Next →"}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Reconnect overlay — fires based on phase transitions. */}
@@ -262,7 +286,7 @@ function LoadingPane() {
         aria-live="polite"
         className="text-base text-muted-foreground"
       >
-        Loading battle\u2026
+        Loading battle…
       </p>
     </div>
   );

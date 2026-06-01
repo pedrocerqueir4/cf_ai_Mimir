@@ -55,7 +55,7 @@ export type BattleMovedPayload = Extract<BattleOutbound, { type: "moved" }>;
 export type BattleErrorPayload = Extract<BattleOutbound, { type: "error" }>;
 
 /**
- * Outbound FROM client TO server — the ONLY two shapes the server accepts.
+ * Outbound FROM client TO server — the shapes the server accepts.
  * Declared here (not re-exported from the server module) because
  * `BattleInboundSchema` is `.strict()` on the server: it rejects any extra
  * fields. Hand-typing the union makes it compile-error obvious if a dev
@@ -63,4 +63,5 @@ export type BattleErrorPayload = Extract<BattleOutbound, { type: "error" }>;
  */
 export type BattleClientOutbound =
   | { action: "answer"; optionId: string }
-  | { action: "hello"; lastSeenQuestionIdx?: number };
+  | { action: "hello"; lastSeenQuestionIdx?: number }
+  | { action: "request_next" };

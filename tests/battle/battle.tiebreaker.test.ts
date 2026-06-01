@@ -13,6 +13,12 @@ import type {
 // enters a sudden-death tiebreaker. First correct wins; if both correct the
 // higher points wins; if both wrong (or both-correct with equal points) the
 // DO pulls the next reserved question.
+//
+// NOTE (reveal phase): After both players answer (or the ask-timer fires), the
+// DO enters "reveal" or "tiebreak-reveal" phase. To advance to the next
+// question / resolve the tiebreak round, the reveal alarm must also be fired.
+// Each "round" therefore requires a reveal alarm in addition to any ask-timer
+// alarm. We use a helper `fireRevealAlarm` to fire it after both-answer flows.
 
 const HOST_ID = "host-tiebreak";
 const GUEST_ID = "guest-tiebreak";
@@ -61,6 +67,13 @@ async function settle(ms = 60) {
   await flush();
   await new Promise((r) => setTimeout(r, ms));
   await flush();
+}
+
+/** Fire the reveal alarm that was scheduled after both players answered. */
+async function fireRevealAlarm(stub: DurableObjectStub<BattleRoom>) {
+  const ran = await runDurableObjectAlarm(stub);
+  expect(ran).toBe(true);
+  await settle();
 }
 
 async function seedTiedAtEndOfRegular(
@@ -118,6 +131,9 @@ describe("BattleRoom tiebreaker (04-11 / MULT-03 / D-15)", () => {
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     await settle();
 
+    // In reveal phase. Fire reveal alarm → enters tiebreak.
+    await fireRevealAlarm(stub);
+
     await runInDurableObject(stub, async (_inst, state) => {
       const rt = (await state.storage.get<BattleRuntime>("runtime"))!;
       expect(rt.phase).toBe("tiebreak");
@@ -159,17 +175,21 @@ describe("BattleRoom tiebreaker (04-11 / MULT-03 / D-15)", () => {
     });
     await flush();
 
-    // Both 0 on Q0 → enter tiebreak at Q1.
+    // Both 0 on Q0 → enter tiebreak at Q1 (after reveal).
     host.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     await flush();
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     await settle();
+    await fireRevealAlarm(stub); // → enters tiebreak, Q1 broadcasted
 
     // Tiebreak round 1: host correct (b), guest wrong (a).
     host.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     await flush();
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "a" }));
     await settle();
+
+    // Now in tiebreak-reveal. Fire reveal alarm → resolveTiebreakRound.
+    await fireRevealAlarm(stub);
 
     await runInDurableObject(stub, async (_inst, state) => {
       const rt = (await state.storage.get<BattleRuntime>("runtime"))!;
@@ -208,12 +228,16 @@ describe("BattleRoom tiebreaker (04-11 / MULT-03 / D-15)", () => {
     host.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     await settle();
+    await fireRevealAlarm(stub); // → enters tiebreak
 
     // Tiebreak round 1 TB0 (correct is "b"): BOTH answer "a" (wrong) → advance.
     host.ws.send(JSON.stringify({ action: "answer", optionId: "a" }));
     await flush();
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "a" }));
     await settle();
+
+    // In tiebreak-reveal. Fire reveal alarm → resolveTiebreakRound → pull TB1.
+    await fireRevealAlarm(stub);
 
     // DO should now be on tiebreak round 2 at TB1.
     await runInDurableObject(stub, async (_inst, state) => {
@@ -253,6 +277,7 @@ describe("BattleRoom tiebreaker (04-11 / MULT-03 / D-15)", () => {
     host.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     await settle();
+    await fireRevealAlarm(stub); // → enters tiebreak
 
     // Tiebreak round — host answers first (faster → more points), guest answers
     // after a micro delay with the same correct option (slower → fewer points).
@@ -261,6 +286,9 @@ describe("BattleRoom tiebreaker (04-11 / MULT-03 / D-15)", () => {
     await new Promise((r) => setTimeout(r, 50));
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     await settle();
+
+    // In tiebreak-reveal. Fire reveal alarm → resolveTiebreakRound → host wins.
+    await fireRevealAlarm(stub);
 
     const hostMsgs = host.received.map((m) => JSON.parse(m));
     const endEvent = hostMsgs.find((m) => m.type === "end");
@@ -293,11 +321,22 @@ describe("BattleRoom tiebreaker (04-11 / MULT-03 / D-15)", () => {
     host.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     await settle();
+    await fireRevealAlarm(stub); // → enters tiebreak
 
-    // In tiebreak round 1, fire the alarm directly (nobody answers in time).
+    // In tiebreak round 1, fire the ask-timer alarm directly (nobody answers).
+    // This enters tiebreak-reveal.
     const ran = await runDurableObjectAlarm(stub);
     expect(ran).toBe(true);
     await settle();
+
+    await runInDurableObject(stub, async (_inst, state) => {
+      const rt = (await state.storage.get<BattleRuntime>("runtime"))!;
+      // In tiebreak-reveal — null fills happened.
+      expect(rt.phase).toBe("tiebreak-reveal");
+    });
+
+    // Fire tiebreak-reveal alarm → resolveTiebreakRound → pull TB1.
+    await fireRevealAlarm(stub);
 
     await runInDurableObject(stub, async (_inst, state) => {
       const rt = (await state.storage.get<BattleRuntime>("runtime"))!;

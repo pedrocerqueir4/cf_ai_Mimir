@@ -12,6 +12,11 @@ import type {
 // questions (no answer within the 15s window), the DO auto-forfeits them;
 // the opponent wins the battle. WRONG answers do NOT increment the miss
 // counter — only null/missed answers do.
+//
+// NOTE (reveal phase): The 15s per-question alarm now enters "reveal" phase
+// first (3s window), then a second alarm fires completeRevealAndAdvance, which
+// is where the forfeit check runs. Each "round" therefore requires TWO alarm
+// firings: ask-timer alarm → reveal; reveal alarm → forfeit-check / next round.
 
 const HOST_ID = "host-forfeit";
 const GUEST_ID = "guest-forfeit";
@@ -82,6 +87,22 @@ async function seedBattle(
   });
 }
 
+/**
+ * Advance through a full reveal cycle:
+ * 1. Fire the 15s ask-timer alarm → enters reveal phase (fills null answers).
+ * 2. Fire the 3s reveal alarm → completeRevealAndAdvance (forfeit-check / next Q).
+ *
+ * Returns true if both alarms ran.
+ */
+async function advanceFullCycle(stub: DurableObjectStub<BattleRoom>): Promise<void> {
+  const ran1 = await runDurableObjectAlarm(stub);
+  expect(ran1).toBe(true);
+  await flush();
+  const ran2 = await runDurableObjectAlarm(stub);
+  expect(ran2).toBe(true);
+  await flush();
+}
+
 describe("BattleRoom idle-forfeit (04-22 / D-26 / T-04-06)", () => {
   beforeAll(async () => {
     await setupD1();
@@ -103,20 +124,29 @@ describe("BattleRoom idle-forfeit (04-22 / D-26 / T-04-06)", () => {
     });
     await flush();
 
-    // Round 1: guest answers (correct "a"); host is silent. Alarm fires.
+    // Round 1: guest answers (correct "a"); host is silent. Both alarms fire.
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "a" }));
     await flush();
+    // Guest answered so only the ask-timer alarm fires (phase → reveal after guest+host).
+    // But host hasn't answered, so we need to fire the ask-timer alarm.
     let ran = await runDurableObjectAlarm(stub);
     expect(ran).toBe(true);
     await flush();
 
+    // After ask-timer: in reveal phase. Miss counts already incremented.
     await runInDurableObject(stub, async (_inst, state) => {
       const rt = (await state.storage.get<BattleRuntime>("runtime"))!;
+      expect(rt.phase).toBe("reveal");
       expect(rt.consecutiveMiss[HOST_ID]).toBe(1);
       expect(rt.consecutiveMiss[GUEST_ID]).toBe(0);
     });
 
-    // Round 2: guest answers (correct "b"); host silent. Alarm fires.
+    // Fire reveal alarm → advances to Q1.
+    ran = await runDurableObjectAlarm(stub);
+    expect(ran).toBe(true);
+    await flush();
+
+    // Round 2: guest answers (correct "b"); host silent. Both alarms fire.
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     await flush();
     ran = await runDurableObjectAlarm(stub);
@@ -128,9 +158,28 @@ describe("BattleRoom idle-forfeit (04-22 / D-26 / T-04-06)", () => {
       expect(rt.consecutiveMiss[HOST_ID]).toBe(2);
     });
 
-    // Round 3: host silent again. Alarm fires → 3 misses → forfeit.
+    // Fire reveal alarm → advances to Q2.
+    ran = await runDurableObjectAlarm(stub);
+    expect(ran).toBe(true);
+    await flush();
+
+    // Round 3: host silent again. Ask-timer alarm → reveal (3 misses detected).
+    // Then reveal alarm → completeRevealAndAdvance → forfeit check fires.
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "a" }));
     await flush();
+    ran = await runDurableObjectAlarm(stub);
+    expect(ran).toBe(true);
+    await flush();
+
+    // In reveal phase — miss count is now 3 but forfeit fires in completeRevealAndAdvance.
+    await runInDurableObject(stub, async (_inst, state) => {
+      const rt = (await state.storage.get<BattleRuntime>("runtime"))!;
+      // Still in reveal, forfeit happens on the reveal alarm.
+      expect(rt.phase).toBe("reveal");
+      expect(rt.consecutiveMiss[HOST_ID]).toBe(3);
+    });
+
+    // Fire reveal alarm → forfeit triggered.
     ran = await runDurableObjectAlarm(stub);
     expect(ran).toBe(true);
     await flush();
@@ -182,6 +231,9 @@ describe("BattleRoom idle-forfeit (04-22 / D-26 / T-04-06)", () => {
       await flush();
       guest.ws.send(JSON.stringify({ action: "answer", optionId: guestAns }));
       await flush();
+      // Both answered → reveal phase. Fire reveal alarm to advance.
+      const ran = await runDurableObjectAlarm(stub);
+      expect(ran).toBe(true);
       await flush();
     }
 
@@ -214,10 +266,11 @@ describe("BattleRoom idle-forfeit (04-22 / D-26 / T-04-06)", () => {
     });
     await flush();
 
-    // Round 1: host silent, alarm fires — consecutiveMiss[HOST_ID] = 1.
+    // Round 1: guest answers, host silent. Ask-timer alarm → reveal (HOST miss=1).
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "a" }));
     await flush();
-    await runDurableObjectAlarm(stub);
+    let ran = await runDurableObjectAlarm(stub);
+    expect(ran).toBe(true);
     await flush();
 
     await runInDurableObject(stub, async (_inst, state) => {
@@ -225,15 +278,25 @@ describe("BattleRoom idle-forfeit (04-22 / D-26 / T-04-06)", () => {
       expect(rt.consecutiveMiss[HOST_ID]).toBe(1);
     });
 
+    // Fire reveal alarm → advances to Q1.
+    ran = await runDurableObjectAlarm(stub);
+    expect(ran).toBe(true);
+    await flush();
+
     // Round 2: host answers WRONG — resets miss counter back to 0.
+    // Both answer → reveal phase. Fire reveal alarm.
     host.ws.send(JSON.stringify({ action: "answer", optionId: "a" })); // wrong for q1 (correct b)
     await flush();
     guest.ws.send(JSON.stringify({ action: "answer", optionId: "b" }));
     await flush();
+    // Both answered → reveal alarm scheduled.
+    ran = await runDurableObjectAlarm(stub);
+    expect(ran).toBe(true);
     await flush();
 
     await runInDurableObject(stub, async (_inst, state) => {
       const rt = (await state.storage.get<BattleRuntime>("runtime"))!;
+      // Host answered (wrong) → miss reset to 0.
       expect(rt.consecutiveMiss[HOST_ID]).toBe(0);
     });
 

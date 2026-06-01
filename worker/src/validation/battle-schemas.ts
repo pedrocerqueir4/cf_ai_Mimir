@@ -22,13 +22,24 @@ export const BattleClientHello = z
   })
   .strict();
 
+// Client → server: sent during reveal phase. When BOTH players send this the
+// server cancels the 3s reveal alarm and advances to the next question
+// immediately. Idempotent: duplicate sends from the same player are no-ops.
+export const BattleRequestNextMessage = z
+  .object({
+    action: z.literal("request_next"),
+  })
+  .strict();
+
 export const BattleInboundSchema = z.discriminatedUnion("action", [
   BattleAnswerMessage,
   BattleClientHello,
+  BattleRequestNextMessage,
 ]);
 
 export type BattleAnswerMessageT = z.infer<typeof BattleAnswerMessage>;
 export type BattleClientHelloT = z.infer<typeof BattleClientHello>;
+export type BattleRequestNextMessageT = z.infer<typeof BattleRequestNextMessage>;
 export type BattleInbound = z.infer<typeof BattleInboundSchema>;
 
 // ─── Outbound (server → client) ──────────────────────────────────────────────
@@ -65,6 +76,9 @@ export const BattleRevealEvent = z.object({
   opponentCorrect: z.boolean(),
   yourPoints: z.number().int().nonnegative(),
   opponentPoints: z.number().int().nonnegative(),
+  // Duration the reveal phase will last (ms). Clients use this to render
+  // a countdown ring on the Next button.
+  revealDurationMs: z.number().int().positive(),
 });
 
 export const BattleSnapshotEvent = z.object({
