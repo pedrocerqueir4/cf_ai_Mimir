@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Map } from "lucide-react";
 import { motion } from "framer-motion";
-import { BATTLE_STARTER_TOPICS } from "~/lib/battle-presets";
 import { cn } from "~/lib/utils";
 import {
   SlotMachineReel,
@@ -17,8 +16,8 @@ import {
  *
  * UI-SPEC §Slot-machine reveal animation — roadmap reveal items = roadmap
  * name (Display 28/40 mobile-desktop, weight 600) + Lucide `Map` icon left.
- * Distractors: topic-adjacent strings from BATTLE_STARTER_TOPICS interleaved
- * with the two actually-proposed roadmaps.
+ * The reel cycles ONLY between the two player-proposed topics (host + guest)
+ * so no unrelated "decoy" strings appear as candidates.
  */
 interface RoadmapRevealReelItem extends SlotMachineReelItemBase {
   id: string;
@@ -26,7 +25,7 @@ interface RoadmapRevealReelItem extends SlotMachineReelItemBase {
 }
 
 export interface RoadmapRevealScreenProps {
-  /** Topic for the host's proposed roadmap. Used to build distractors. */
+  /** Topic for the host's proposed roadmap. Used to build reel cycle. */
   hostTopic: string;
   /** Topic for the guest's proposed roadmap (falls back to host if missing). */
   guestTopic: string;
@@ -44,9 +43,18 @@ const FINAL_INDEX = 37;
 const POST_SETTLE_ADVANCE_MS = 750;
 
 /**
- * Build the reel item list. The pool alternates (host, guest, decoys) so each
- * visible row during the spin looks plausibly like the winner. The winning
- * topic is placed exactly at FINAL_INDEX.
+ * Build the reel item list.
+ *
+ * The cycle pool is ONLY the two player-proposed topics (hostTopic,
+ * guestTopic), deduped. This ensures no unrelated starter-topic strings
+ * appear as "candidates" during the spin — the reel only cycles between the
+ * two topics the players actually wagered.
+ *
+ * If both players proposed the same topic the deduped pool has 1 entry; the
+ * reel still spins visibly (repeating that one title) and locks on it.
+ * The winning topic (placed at FINAL_INDEX) may be the AI-generated title
+ * (winningRoadmapTitle), which is fine — it replaces the raw topic at the
+ * exact lock position only.
  */
 function buildRoadmapReelItems({
   hostTopic,
@@ -57,10 +65,8 @@ function buildRoadmapReelItems({
   guestTopic: string;
   winningTopic: string;
 }): RoadmapRevealReelItem[] {
-  const decoyTopics = BATTLE_STARTER_TOPICS.slice(0, 3);
-  const pool: string[] = [hostTopic, guestTopic, ...decoyTopics].filter(
-    Boolean,
-  );
+  // Restrict pool to the two player topics only — no decoys.
+  const pool: string[] = [hostTopic, guestTopic].filter(Boolean);
   // Dedupe while preserving order — avoids "Foo / Foo / Foo" repeats when
   // both players proposed the same roadmap.
   const seen = new Set<string>();
@@ -105,7 +111,7 @@ export function RoadmapRevealScreen({
     }, POST_SETTLE_ADVANCE_MS);
   }
 
-  const heading = settled ? "Topic locked" : "Picking topic\u2026";
+  const heading = settled ? "Topic locked" : "Picking topic…";
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-8">

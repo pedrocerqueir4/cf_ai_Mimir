@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ChevronLeft } from "lucide-react";
 import { toast } from "~/lib/toast";
@@ -17,25 +17,6 @@ import {
   joinBattle,
   type RoadmapListItem,
 } from "~/lib/api-client";
-import { BATTLE_STARTER_TOPICS } from "~/lib/battle-presets";
-
-// Stable synthetic id for preset topics so the RoadmapPicker radio group
-// can track selection without colliding with real roadmap ids.
-const PRESET_ID_PREFIX = "preset:";
-const presetId = (topic: string) => `${PRESET_ID_PREFIX}${topic}`;
-
-const PRESET_ROADMAPS: RoadmapListItem[] = BATTLE_STARTER_TOPICS.map(
-  (topic) => ({
-    id: presetId(topic),
-    title: topic,
-    topic,
-    complexity: "linear",
-    status: "complete",
-    totalLessons: 0,
-    completedLessons: 0,
-    createdAt: new Date(0).toISOString(),
-  }),
-);
 
 export default function BattleJoinPage() {
   const navigate = useNavigate();
@@ -57,27 +38,15 @@ export default function BattleJoinPage() {
     queryFn: fetchRoadmaps,
   });
 
-  const visibleRoadmaps =
-    roadmaps?.filter(
-      (r) => !("status" in r) || (r as { status?: string }).status === "complete",
-    ) ?? null;
-
-  const hasOwnRoadmaps = (visibleRoadmaps?.length ?? 0) > 0;
-
-  // If the user has no roadmaps, fall back to the preset starter list.
-  const pickerRoadmaps: RoadmapListItem[] | null = roadmapsLoading
-    ? null
-    : hasOwnRoadmaps
-      ? visibleRoadmaps
-      : PRESET_ROADMAPS;
-
-  // Reset selected id when the picker swaps between own/preset lists.
-  useEffect(() => {
-    setSelectedRoadmapId(null);
-  }, [hasOwnRoadmaps]);
+  const visibleRoadmaps: RoadmapListItem[] | null = roadmaps
+    ? roadmaps.filter(
+        (r) => !("status" in r) || (r as { status?: string }).status === "complete",
+      )
+    : null;
 
   const codeComplete = joinCode.length === JOIN_CODE_LENGTH;
-  const canSubmit = codeComplete && selectedRoadmapId !== null && !submitting;
+  const canSubmit =
+    codeComplete && selectedRoadmapId !== null && !submitting;
 
   const handleCodeChange = (next: string) => {
     setJoinCode(next);
@@ -91,22 +60,10 @@ export default function BattleJoinPage() {
     setCodeError(null);
     setGeneralError(null);
     try {
-      // Preset ids aren't real roadmap rows. The server accepts an alternate
-      // `presetTopic` field — branches past the IDOR roadmap-ownership check
-      // and uses the raw topic string as the pool lookup handle. Own roadmaps
-      // send `roadmapId` and go through the ownership-verified path.
-      const isPreset = selectedRoadmapId!.startsWith(PRESET_ID_PREFIX);
-      const response = await joinBattle(
-        isPreset
-          ? {
-              joinCode,
-              presetTopic: selectedRoadmapId!.slice(PRESET_ID_PREFIX.length),
-            }
-          : {
-              joinCode,
-              roadmapId: selectedRoadmapId!,
-            },
-      );
+      const response = await joinBattle({
+        joinCode,
+        roadmapId: selectedRoadmapId!,
+      });
 
       navigate(`/battle/pre/${encodeURIComponent(response.battleId)}`, {
         state: {
@@ -172,25 +129,22 @@ export default function BattleJoinPage() {
 
         {!roadmapsLoading && !roadmapsError && (
           <RoadmapPicker
-            roadmaps={pickerRoadmaps}
+            roadmaps={visibleRoadmaps}
             selectedId={selectedRoadmapId}
             onSelect={setSelectedRoadmapId}
             emptyState={
               <Card>
-                <CardContent className="p-6 text-base text-muted-foreground">
-                  You don&apos;t have any roadmaps yet. Pick one of the starter
-                  topics to join this battle.
+                <CardContent className="p-6 flex flex-col gap-4">
+                  <p className="text-base text-muted-foreground">
+                    You need a completed roadmap to join a battle.
+                  </p>
+                  <Button asChild variant="outline" className="w-full">
+                    <Link to="/">Create a roadmap</Link>
+                  </Button>
                 </CardContent>
               </Card>
             }
           />
-        )}
-
-        {!hasOwnRoadmaps && !roadmapsLoading && !roadmapsError && (
-          <p className="text-sm text-muted-foreground -mt-6">
-            Starter topics let you jump into a battle even without your own
-            roadmap.
-          </p>
         )}
 
         {generalError && (
