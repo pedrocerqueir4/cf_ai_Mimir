@@ -73,7 +73,7 @@ export default function RoadmapsPage() {
           Roadmaps
         </h1>
         <Link
-          to="/chat"
+          to="/chat?prefill=Make+a+roadmap+about+"
           className={cn(
             buttonVariants(),
             "inline-flex items-center justify-center",
