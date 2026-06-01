@@ -124,7 +124,7 @@ export default function BattleNewPage() {
                   </p>
                   <Button
                     className="min-h-12"
-                    onClick={() => navigate("/chat")}
+                    onClick={() => navigate("/chat?prefill=Make+a+roadmap+about+")}
                   >
                     Go to Chat
                   </Button>

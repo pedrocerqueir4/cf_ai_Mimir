@@ -119,7 +119,7 @@ export default function RoadmapsPage() {
             Tell Mimir what you want to learn and we&apos;ll build a roadmap in seconds.
           </p>
           <Link
-            to="/chat"
+            to="/chat?prefill=Make+a+roadmap+about+"
             className={cn(
               buttonVariants({ variant: "jewel" }),
               "inline-flex items-center justify-center",
