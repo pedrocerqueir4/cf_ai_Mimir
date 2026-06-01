@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Send, Loader2, Check, CheckCircle, AlertTriangle } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -406,6 +406,28 @@ export default function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
+
+  // Consume a ?prefill=... query param (e.g. linked from /battle/join empty
+  // state's "Create a roadmap" CTA) by populating the chat input ONCE and
+  // dropping the param from the URL so a later refresh doesn't re-fill. The
+  // ref guard prevents the React StrictMode double-effect from running twice.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const prefillConsumedRef = useRef(false);
+  useEffect(() => {
+    if (prefillConsumedRef.current) return;
+    const prefill = searchParams.get("prefill");
+    if (!prefill) return;
+    prefillConsumedRef.current = true;
+    // Clamp to 200 chars defensively (max prompt length is enforced server-side
+    // elsewhere; this guards against crafted URLs at the UI surface).
+    setInput(prefill.slice(0, 200));
+    // Drop the param from the URL without adding a history entry.
+    const next = new URLSearchParams(searchParams);
+    next.delete("prefill");
+    setSearchParams(next, { replace: true });
+    // Focus the textarea so the user can continue typing immediately.
+    queueMicrotask(() => textareaRef.current?.focus());
+  }, [searchParams, setSearchParams]);
 
   // Restore existing conversationId from storage (survives reload) or mint
   // a fresh one. Do this synchronously via useRef's initializer so the first

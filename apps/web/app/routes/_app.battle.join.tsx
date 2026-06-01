@@ -139,7 +139,7 @@ export default function BattleJoinPage() {
                     You need a completed roadmap to join a battle.
                   </p>
                   <Button asChild variant="outline" className="w-full">
-                    <Link to="/">Create a roadmap</Link>
+                    <Link to="/chat?prefill=Make+a+roadmap+about+">Create a roadmap</Link>
                   </Button>
                 </CardContent>
               </Card>
