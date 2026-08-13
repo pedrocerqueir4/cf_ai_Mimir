@@ -6,7 +6,6 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "~/components/ui/avatar";
 
 import { useChatStore } from "~/stores/chat-store";
 import {
@@ -175,9 +174,6 @@ function GenerationProgressBubble({
     // Generic failure: keep existing destructive treatment.
     return (
       <div className="flex items-start gap-3">
-        <Avatar className="h-8 w-8 shrink-0">
-          <AvatarFallback className="text-[12px] text-[hsl(var(--fg-muted))]">AI</AvatarFallback>
-        </Avatar>
         <div className="max-w-[80%] rounded-[var(--radius-lg)] rounded-tl-sm border border-[hsl(var(--destructive))] bg-[hsl(var(--bg-elevated))] p-4">
           <p className="text-[14px] leading-[1.5] text-[hsl(var(--destructive))]">
             Mimir couldn&apos;t generate this. Try rewording your topic.
@@ -189,9 +185,6 @@ function GenerationProgressBubble({
 
   return (
     <div className="flex items-start gap-3">
-      <Avatar className="h-8 w-8 shrink-0">
-        <AvatarFallback className="text-[12px] text-[hsl(var(--fg-muted))]">AI</AvatarFallback>
-      </Avatar>
       <div className="max-w-[80%] rounded-[var(--radius-lg)] rounded-tl-sm bg-[hsl(var(--bg-elevated))] border border-[hsl(var(--border))] p-4">
         {!isComplete ? (
           <div aria-live="polite" className="flex flex-col gap-2">
@@ -281,9 +274,6 @@ function SystemWarningBubble({ message }: { message: string }) {
 function TypingIndicator() {
   return (
     <div className="flex items-start gap-3" aria-label="AI is thinking">
-      <Avatar className="h-8 w-8 shrink-0">
-        <AvatarFallback className="text-[12px] text-[hsl(var(--fg-muted))]">AI</AvatarFallback>
-      </Avatar>
       <div className="rounded-[var(--radius-lg)] rounded-tl-sm bg-[hsl(var(--bg-elevated))] border border-[hsl(var(--border))] p-4">
         <div className="flex gap-1">
           <span
@@ -366,11 +356,6 @@ function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <motion.div {...enterAnim} className="flex flex-col items-start gap-1">
       <div className="flex items-start gap-3">
-        <Avatar className="h-8 w-8 shrink-0">
-          <AvatarFallback className="text-[12px] text-[hsl(var(--fg-muted))]">
-            AI
-          </AvatarFallback>
-        </Avatar>
         {/* AI bubble — --bg-elevated per UI-SPEC § Chat */}
         <div className="max-w-[80%] rounded-[var(--radius-lg)] rounded-tl-sm bg-[hsl(var(--bg-elevated))] border border-[hsl(var(--border))] p-4">
           <p className="text-[16px] leading-[1.5] whitespace-pre-wrap">
@@ -378,7 +363,8 @@ function MessageBubble({ message }: MessageBubbleProps) {
           </p>
         </div>
       </div>
-      <span className="ml-11 text-[12px] leading-[1.4] text-[hsl(var(--fg-muted))]">
+      {/* No ml-11 offset — the 32px avatar + 12px gap it aligned past is gone. */}
+      <span className="text-[12px] leading-[1.4] text-[hsl(var(--fg-muted))]">
         {formattedTime}
       </span>
     </motion.div>
@@ -897,7 +883,7 @@ export default function ChatPage() {
         draggable={false}
         width={154}
         height={180}
-        className="pointer-events-none fixed bottom-[59px] left-[292px] z-30 hidden h-[180px] w-auto select-none lg:block"
+        className="pointer-events-none fixed bottom-[45px] left-[292px] z-30 hidden h-[180px] w-auto select-none lg:block"
       />
 
       {/* Frosted composer pinned to viewport bottom — UI-SPEC § Chat.
