@@ -883,7 +883,7 @@ export default function ChatPage() {
         draggable={false}
         width={154}
         height={180}
-        className="pointer-events-none fixed bottom-[45px] left-[292px] z-30 hidden h-[180px] w-auto select-none lg:block"
+        className="pointer-events-none fixed bottom-[32px] left-[292px] z-30 hidden h-[180px] w-auto select-none lg:block"
       />
 
       {/* Frosted composer pinned to viewport bottom — UI-SPEC § Chat.
