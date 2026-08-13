@@ -10,22 +10,29 @@ interface OAuthButtonsProps {
 /**
  * OAuth provider buttons (Google + GitHub).
  *
+ * Google is intentionally intercepted client-side: no Google OAuth
+ * credentials are provisioned, so clicking "Continue with Google" fires a
+ * local warning toast instead of starting `signIn.social`. GitHub is the
+ * only live OAuth path.
+ *
  * Wires `errorCallbackURL: "/auth/oauth-error"` into `signIn.social({...})`
- * per RESEARCH.md Pattern 6 / CONTEXT.md D-04. Better Auth redirects to that
- * URL with `?error=<code>` on OAuth failure; the new `/auth/oauth-error`
- * route classifies the code into one of three UI-SPEC copy variants.
+ * per RESEARCH.md Pattern 6 / CONTEXT.md D-04 for the GitHub path only.
+ * Better Auth redirects to that URL with `?error=<code>` on OAuth failure;
+ * the `/auth/oauth-error` route classifies the code into one of three
+ * UI-SPEC copy variants.
  *
  * Fallback path: per RESEARCH.md Assumption A2 (Better Auth issue #1580 —
  * `errorCallbackURL` is sometimes ignored), the existing inline `?error=`
  * Alert in `_auth.sign-in.tsx` covers the case where Better Auth redirects
- * back to /auth/sign-in instead of /auth/oauth-error. Both paths in place.
+ * back to /auth/sign-in instead of /auth/oauth-error. Both paths in place
+ * for GitHub.
  *
  * UX-04: `callbackURL` consumes the existing sessionStorage restore-path
  * pattern from `~/lib/session.ts` so successful sign-in lands on the page
  * the user was on before being redirected to auth.
  */
 export function OAuthButtons({ mode: _mode }: OAuthButtonsProps) {
-  async function handleOAuthClick(provider: "google" | "github") {
+  async function handleOAuthClick(provider: "github") {
     try {
       await signIn.social({
         provider,
@@ -41,13 +48,22 @@ export function OAuthButtons({ mode: _mode }: OAuthButtonsProps) {
     }
   }
 
+  function handleGoogleUnavailable() {
+    toast.warning("Not available at the moment.", {
+      description:
+        "The moderator is poor and doesn't have a Google key to make this possible. Thanks :)",
+      id: "google-oauth-unavailable",
+    });
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <Button
         type="button"
         variant="outline"
-        className="min-h-12 w-full"
-        onClick={() => handleOAuthClick("google")}
+        className="min-h-12 w-full opacity-60"
+        aria-disabled="true"
+        onClick={handleGoogleUnavailable}
       >
         {/* Google icon SVG — 20x20 */}
         <svg
@@ -73,6 +89,7 @@ export function OAuthButtons({ mode: _mode }: OAuthButtonsProps) {
           />
         </svg>
         Continue with Google
+        <span className="sr-only"> (unavailable)</span>
       </Button>
       <Button
         type="button"
