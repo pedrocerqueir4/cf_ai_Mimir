@@ -1,33 +1,56 @@
 "use client"; // Defensive — Toasty uses portal/DOM measurement
 import * as React from "react";
 import {
-  Toast,
   Toasty as KumoToastyViewport,
+  useKumoToastManager,
 } from "@cloudflare/kumo/components/toast";
-import { kumoToastManager } from "~/lib/toast";
+import { setLiveToastManager } from "~/lib/toast";
 
 /**
- * Composite provider per Phase 07 RESEARCH § Pattern 3 / A1:
- *   <Toast.Provider toastManager={kumoToastManager}>  -- our singleton manager
- *     <KumoToastyViewport>{children}</KumoToastyViewport>  -- Kumo's styled viewport
+ * Bridges Kumo's hook-only toast manager to the imperative `toast.*()` shim.
  *
- * The outer provider binds the manager so module-scope `toast.add(...)` calls
- * from `~/lib/toast` are read by Kumo's viewport hook (`useKumoToastManager`).
+ * Kumo's `<Toasty>` owns its `Toast.Provider` internally and exposes no
+ * `toastManager` prop (`ToastyProps` is `{ children, container? }`), so an
+ * externally-created manager can never be bound to it — the supported API is
+ * `useKumoToastManager()` from inside a child. This component is that child:
+ * it grabs the live manager and publishes it to `~/lib/toast`, which lets the
+ * ~20 imperative call sites keep working unchanged.
  *
- * CRITICAL — `Toast` MUST come from `@cloudflare/kumo/components/toast`, never
- * from `@base-ui/react/toast`. Kumo ships its own copy of Base UI bundled into
- * `dist/chunks/vendor-base-ui-*.js` (a relative import, so it is NOT deduped
- * against the app's `@base-ui/react`). A `Toast.Provider` taken from the app's
- * copy writes to a different React context than the one Kumo's viewport reads,
- * so every toast is swallowed silently — the manager accepts the call, the
- * viewport's `toasts` array stays empty, and nothing renders anywhere in the
- * app. Kumo re-exports the whole Base UI `Toast` namespace (Provider included)
- * from its own copy, which is what keeps provider and viewport on one context.
+ * It registers a stable accessor (once, on mount) that reads a ref holding the
+ * newest manager — `useKumoToastManager()` returns a fresh object every render,
+ * so registering that object directly would re-run the effect on every toast
+ * state change.
+ */
+function ToastManagerBridge() {
+  const manager = useKumoToastManager();
+  const latest = React.useRef(manager);
+  latest.current = manager;
+
+  React.useEffect(() => {
+    setLiveToastManager(() => latest.current);
+    return () => setLiveToastManager(null);
+  }, []);
+
+  return null;
+}
+
+/**
+ * Toast host. `<Toasty>` supplies both the provider and the portalled
+ * viewport, so it is the only wrapper needed — do NOT add a
+ * `<Toast.Provider>` around it. An outer provider is shadowed by Kumo's
+ * inner one, which is what silently swallowed every toast in the app before
+ * this was rewritten (see the comment block in `~/lib/toast.ts`).
+ *
+ * Related trap: Kumo bundles its own copy of Base UI (a relative import into
+ * `dist/chunks/vendor-base-ui-*.js`), so Base UI primitives imported from the
+ * app's `@base-ui/react` land on a different React context than Kumo's
+ * components read. Always source them from `@cloudflare/kumo/*`.
  */
 export function Toasty({ children }: { children: React.ReactNode }) {
   return (
-    <Toast.Provider toastManager={kumoToastManager}>
-      <KumoToastyViewport>{children}</KumoToastyViewport>
-    </Toast.Provider>
+    <KumoToastyViewport>
+      <ToastManagerBridge />
+      {children}
+    </KumoToastyViewport>
   );
 }
