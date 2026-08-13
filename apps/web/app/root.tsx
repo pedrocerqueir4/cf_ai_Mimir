@@ -18,7 +18,11 @@ import { TooltipProvider } from "~/components/ui/tooltip";
 // Fonts now self-hosted via @fontsource imports in app.css (see Phase 06 Plan 1).
 // No <link rel="preload"> directives — trust @fontsource's font-display:swap default.
 // (RESEARCH.md Open Question 1 + Pitfall 6 — revisit in Plan 6 only if LCP regresses.)
-export const links: Route.LinksFunction = () => [];
+export const links: Route.LinksFunction = () => [
+  { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
+  { rel: "icon", href: "/favicon.png", type: "image/png", sizes: "512x512" },
+  { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
+];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
