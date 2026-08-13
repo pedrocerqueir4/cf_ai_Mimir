@@ -818,9 +818,13 @@ export default function ChatPage() {
           of that, the composer sits 64px above the bottom (BottomNav h-16)
           but the composer overlays content from its top edge, so we need
           ~160px clearance from the message-list bottom = pb-40. Desktop:
-          composer ≈ 96px, no BottomNav, so pb-28 covers it. */}
+          composer ≈ 96px, no BottomNav, so pb-28 would cover the composer
+          alone — but lg:pb-44 (176px) is used instead so the decorative
+          mascot (180px tall, standing on the composer) also clears the
+          last message in the resting scroll position. Do not "fix" this
+          back to pb-28. */}
       <ScrollArea className="flex-1">
-        <div className="px-4 py-4 pb-40 lg:pb-28">
+        <div className="px-4 py-4 pb-40 lg:pb-44">
           {/* Top sentinel — fires loadOlder when visible. Rendered only when
               there's more history to avoid an observer on an unused node. */}
           {hasMoreHistory && (
@@ -878,6 +882,23 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
+
+      {/* Decorative desktop-only mascot — standing behind the composer's
+          frosted top edge (z-30 < composer's z-40, so her feet are clipped
+          by it, not painted on top of it). Purely decorative: empty alt,
+          aria-hidden, pointer-events-none, unreachable by keyboard. Hidden
+          below lg because the composer spans the full viewport width there
+          and would sit on top of message text. */}
+      <img
+        src="/mimir-mascot.png"
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        draggable={false}
+        width={154}
+        height={180}
+        className="pointer-events-none fixed bottom-[59px] left-[292px] z-30 hidden h-[180px] w-auto select-none lg:block"
+      />
 
       {/* Frosted composer pinned to viewport bottom — UI-SPEC § Chat.
           Always `fixed` so it never tracks the message-list height
