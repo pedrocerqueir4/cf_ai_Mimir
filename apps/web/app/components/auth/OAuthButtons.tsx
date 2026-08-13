@@ -1,7 +1,5 @@
 import { toast } from "~/lib/toast";
 import { Button } from "~/components/ui/button";
-import { signIn } from "~/lib/auth-client";
-import { getRestorePath } from "~/lib/session";
 
 interface OAuthButtonsProps {
   mode: "sign-in" | "sign-up";
@@ -10,49 +8,39 @@ interface OAuthButtonsProps {
 /**
  * OAuth provider buttons (Google + GitHub).
  *
- * Google is intentionally intercepted client-side: no Google OAuth
- * credentials are provisioned, so clicking "Continue with Google" fires a
- * local warning toast instead of starting `signIn.social`. GitHub is the
- * only live OAuth path.
+ * Neither provider is live: no Google or GitHub OAuth credentials are
+ * provisioned, so both buttons are intercepted client-side and fire a local
+ * warning toast instead of starting a real OAuth flow. Email/password
+ * (`signIn.email` in `_auth.sign-in.tsx`) is the only working sign-in path
+ * right now.
  *
- * Wires `errorCallbackURL: "/auth/oauth-error"` into `signIn.social({...})`
- * per RESEARCH.md Pattern 6 / CONTEXT.md D-04 for the GitHub path only.
- * Better Auth redirects to that URL with `?error=<code>` on OAuth failure;
- * the `/auth/oauth-error` route classifies the code into one of three
- * UI-SPEC copy variants.
+ * Restore path, once a provider's credentials are provisioned: replace that
+ * button's `onClick={() => handleUnavailable("<provider>")}` with a real
+ * handler calling
+ * `signIn.social({ provider, callbackURL: getRestorePath() ?? "/", errorCallbackURL: "/auth/oauth-error" })`
+ * (see `~/lib/auth-client` and `~/lib/session`'s `getRestorePath`). Better
+ * Auth redirects to `/auth/oauth-error` with `?error=<code>` on OAuth
+ * failure; that route (`apps/web/app/routes.ts`) classifies the code into
+ * one of three UI-SPEC copy variants and is kept alive, unreachable, for
+ * exactly this restore. Per RESEARCH.md Assumption A2 (Better Auth issue
+ * #1580 — `errorCallbackURL` is sometimes ignored), the existing inline
+ * `?error=` Alert in `_auth.sign-in.tsx` is a defensive fallback for the
+ * case where Better Auth redirects back to `/auth/sign-in` instead of
+ * `/auth/oauth-error` — keep both paths when restoring.
  *
- * Fallback path: per RESEARCH.md Assumption A2 (Better Auth issue #1580 —
- * `errorCallbackURL` is sometimes ignored), the existing inline `?error=`
- * Alert in `_auth.sign-in.tsx` covers the case where Better Auth redirects
- * back to /auth/sign-in instead of /auth/oauth-error. Both paths in place
- * for GitHub.
- *
- * UX-04: `callbackURL` consumes the existing sessionStorage restore-path
- * pattern from `~/lib/session.ts` so successful sign-in lands on the page
- * the user was on before being redirected to auth.
+ * UX-04: the restored handler should feed `callbackURL` from the existing
+ * sessionStorage restore-path pattern in `~/lib/session.ts` so successful
+ * sign-in lands on the page the user was on before being redirected to auth.
  */
 export function OAuthButtons({ mode: _mode }: OAuthButtonsProps) {
-  async function handleOAuthClick(provider: "github") {
-    try {
-      await signIn.social({
-        provider,
-        callbackURL: getRestorePath() ?? "/",
-        errorCallbackURL: "/auth/oauth-error",
-      });
-    } catch {
-      // Defensive: signIn.social normally redirects (so this catch never fires
-      // in the happy path). If it throws synchronously (network error before
-      // the redirect lands), surface a toast — Better Auth's documented error
-      // flow is the redirect, not a thrown promise.
-      toast.error("Sign-in failed. Please try again.");
-    }
-  }
-
-  function handleGoogleUnavailable() {
+  function handleUnavailable(provider: "google" | "github") {
+    const description =
+      provider === "google"
+        ? "The moderator is poor and doesn't have a Google key to make this possible. Thanks :)"
+        : "The moderator hasn't wired up a GitHub key either — email and password still work fine. Thanks :)";
     toast.warning("Not available at the moment.", {
-      description:
-        "The moderator is poor and doesn't have a Google key to make this possible. Thanks :)",
-      id: "google-oauth-unavailable",
+      description,
+      id: `${provider}-oauth-unavailable`,
     });
   }
 
@@ -63,7 +51,7 @@ export function OAuthButtons({ mode: _mode }: OAuthButtonsProps) {
         variant="outline"
         className="min-h-12 w-full opacity-60"
         aria-disabled="true"
-        onClick={handleGoogleUnavailable}
+        onClick={() => handleUnavailable("google")}
       >
         {/* Google icon SVG — 20x20 */}
         <svg
@@ -94,8 +82,9 @@ export function OAuthButtons({ mode: _mode }: OAuthButtonsProps) {
       <Button
         type="button"
         variant="outline"
-        className="min-h-12 w-full"
-        onClick={() => handleOAuthClick("github")}
+        className="min-h-12 w-full opacity-60"
+        aria-disabled="true"
+        onClick={() => handleUnavailable("github")}
       >
         {/* GitHub icon SVG — 20x20 */}
         <svg
@@ -107,6 +96,7 @@ export function OAuthButtons({ mode: _mode }: OAuthButtonsProps) {
           <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.338c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z" />
         </svg>
         Continue with GitHub
+        <span className="sr-only"> (unavailable)</span>
       </Button>
     </div>
   );
